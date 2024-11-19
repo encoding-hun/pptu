@@ -1,11 +1,10 @@
 from __future__ import annotations
-from typing import Any
 
 import re
 import time
 import uuid
 from abc import ABC
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from guessit import guessit
 from pymediainfo import MediaInfo

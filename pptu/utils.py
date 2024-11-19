@@ -7,8 +7,11 @@ import os
 import re
 import shutil
 import sys
+from difflib import SequenceMatcher
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, IO, Iterable, Literal, NoReturn, Pattern, overload
+from typing import TYPE_CHECKING, Any, IO, Literal, NoReturn, overload
+from collections.abc import Iterable
+from re import Pattern
 
 import humanize
 import oxipng
@@ -134,9 +137,10 @@ class Img:
     def hdbimg(
         self, files: list[Path], thumbnail_width: int = 220, name: str = ""
     ) -> list[Any | None] | None:
-        with Console().status(
-            "Uploading snapshots..."
-        ), contextlib.ExitStack() as stack:
+        with (
+            Console().status("Uploading snapshots..."),
+            contextlib.ExitStack() as stack,
+        ):
             r = self.tracker.session.post(
                 url="https://img.hdbits.org/upload_api.php",
                 files={
@@ -266,13 +270,11 @@ def wprint(text: str) -> None:
 
 
 @overload
-def eprint(text: str, fatal: Literal[False] = False, exit_code: int = 1) -> None:
-    ...
+def eprint(text: str, fatal: Literal[False] = False, exit_code: int = 1) -> None: ...
 
 
 @overload
-def eprint(text: str, fatal: Literal[True], exit_code: int = 1) -> NoReturn:
-    ...
+def eprint(text: str, fatal: Literal[True], exit_code: int = 1) -> NoReturn: ...
 
 
 def eprint(text: str, fatal: bool = False, exit_code: int = 1) -> None | NoReturn:
@@ -370,3 +372,7 @@ def as_list(*args: Any) -> list[Any]:
     if args == (None,):
         return []
     return list(itertools.chain.from_iterable(as_lists(*args)))
+
+
+def similar(x: str, y: str) -> float:
+    return SequenceMatcher(None, x, y).ratio()

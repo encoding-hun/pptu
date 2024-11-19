@@ -1,17 +1,16 @@
 from __future__ import annotations
-from typing import Any
 
 import hashlib
 import re
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from guessit import guessit
 from imdb import Cinemagoer
 from pyotp import TOTP
 from rich.prompt import Prompt
 
-from ..utils import Img, eprint, load_html, print, wprint
+from ..utils import Img, eprint, load_html, print, similar, wprint
 from . import Uploader
 
 
@@ -242,6 +241,10 @@ class HDBitsUploader(Uploader):
                 print(f"Detected title: [bold cyan]{title}[/]")
 
                 if imdb_results := ia.search_movie(title):
+                    # needs more testing
+                    #imdb_results.sort(
+                    #    key=lambda x: similar(x.data["title"], title), reverse=True
+                    #)
                     imdb = f"https://www.imdb.com/title/tt{imdb_results[0].movieID}/"
             else:
                 wprint("Unable to extract title from filename.")

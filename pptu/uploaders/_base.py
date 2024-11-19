@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Any
 
 from abc import ABC, abstractmethod
 from hashlib import sha1
@@ -25,7 +24,7 @@ class Uploader(ABC):
 
     all_files: bool = False  # Whether to generate MediaInfo and snapshots for all files
     min_snapshots: int = 0
-    snapshots_plus: int = 0 # Number of extra snapshots to generate
+    snapshots_plus: int = 0  # Number of extra snapshots to generate
     random_snapshots: bool = False
     mediainfo: bool = True
 
@@ -33,25 +32,43 @@ class Uploader(ABC):
         self.dirs = PlatformDirs(appname="pptu", appauthor=False)
 
         self.config = Config(self.dirs.user_config_path / "config.toml")
-        self.cookies_path = self.dirs.user_data_path / "cookies" / \
-            f"""{self.name.lower()}_{sha1(f"{self.config.get(self, 'username')}".encode()).hexdigest()}.txt"""
+        self.cookies_path = (
+            self.dirs.user_data_path
+            / "cookies"
+            / f"""{self.name.lower()}_{sha1(f"{self.config.get(self, 'username')}".encode()).hexdigest()}.txt"""
+        )
         if not self.cookies_path.exists():
-            self.cookies_path = self.dirs.user_data_path / "cookies" / \
-                f"""{self.name.lower()}_{sha1(f"{self.config.get(self, 'username')}".encode()).hexdigest()}.txt"""
+            self.cookies_path = (
+                self.dirs.user_data_path
+                / "cookies"
+                / f"""{self.name.lower()}_{sha1(f"{self.config.get(self, 'username')}".encode()).hexdigest()}.txt"""
+            )
         self.cookie_jar = MozillaCookieJar(self.cookies_path)
         if self.cookies_path.exists():
             self.cookie_jar.load(ignore_expires=True, ignore_discard=True)
 
         self.session = requests.Session()
         for scheme in ("http://", "https://"):
-            self.session.mount(scheme, HTTPAdapter(max_retries=Retry(
-                total=5,
-                backoff_factor=1,
-                allowed_methods=["DELETE", "GET", "HEAD",
-                                 "OPTIONS", "POST", "PUT", "TRACE"],
-                status_forcelist=[429, 500, 502, 503, 504],
-                raise_on_status=False,
-            )))
+            self.session.mount(
+                scheme,
+                HTTPAdapter(
+                    max_retries=Retry(
+                        total=5,
+                        backoff_factor=1,
+                        allowed_methods=[
+                            "DELETE",
+                            "GET",
+                            "HEAD",
+                            "OPTIONS",
+                            "POST",
+                            "PUT",
+                            "TRACE",
+                        ],
+                        status_forcelist=[429, 500, 502, 503, 504],
+                        raise_on_status=False,
+                    )
+                ),
+            )
         for cookie in self.cookie_jar:
             self.session.cookies.set_cookie(cookie)
         self.session.proxies.update({"all": self.config.get(self, "proxy")})

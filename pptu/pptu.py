@@ -6,7 +6,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 import oxipng
 import torf
@@ -145,7 +145,13 @@ class PPTU:
             if self.path.is_file() or self.tracker.all_files:
                 f = self.path
             else:
-                f = sorted([*self.path.glob("*.mkv"), *self.path.glob("*.mp4"), *self.path.glob("*.m2ts")])[0]
+                f = sorted(
+                    [
+                        *self.path.glob("*.mkv"),
+                        *self.path.glob("*.mp4"),
+                        *self.path.glob("*.m2ts"),
+                    ]
+                )[0]
 
             mediainfo = MediaInfo.parse(f, output="", full=False)
             mediainfo_path.write_text(mediainfo)
