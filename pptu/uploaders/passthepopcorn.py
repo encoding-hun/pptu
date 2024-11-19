@@ -1,8 +1,7 @@
 from __future__ import annotations
-from typing import Any
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from imdb import Cinemagoer
 from pymediainfo import MediaInfo
@@ -171,8 +170,16 @@ class PassThePopcornUploader(Uploader):
             return False
 
         imdb_movie = ia.get_movie(m.group(1))
-        title = imdb_movie.data["original title"]
-        year = imdb_movie.data["year"]
+        title = imdb_movie.data.get("original title") or imdb_movie.data.get(
+            "localized title"
+        )
+        if not title:
+            wprint("Unable to get movie title from IMDb")
+            title = Prompt.ask("Movie title")
+        year = imdb_movie.data.get("year")
+        if not year:
+            wprint("Unable to get movie year from IMDb")
+            year = Prompt.ask("Movie year")
 
         print(f"IMDb: [cyan][bold]{title}[/] [not bold]({year})[/][/]")
 
