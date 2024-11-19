@@ -1,31 +1,18 @@
+#  See https://pre-commit.com for more information
+#  See https://pre-commit.com/hooks.html for more hooks
+
 repos:
-  - repo: https://github.com/mtkennerly/pre-commit-hooks
-    rev: v0.3.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.6
     hooks:
-      - id: poetry-ruff
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2
     hooks:
       - id: isort
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
-    hooks:
-      - id: mypy
-        entry: dmypy run
-        args: []
-        additional_dependencies:
-          - httpx==0.23.0
-          - humanize==4.3.0
-          - langcodes==3.3.0
-          - platformdirs==2.5.2
-          - pyotp==2.7.0
-          - pyoxipng==0.1.0
-          - rich==12.5.1
-          - types-attrs==19.1.0
-          - types-beautifulsoup4==4.11.6
-          - types-requests==2.28.11
-          - types-toml==0.10.8
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
@@ -63,23 +50,23 @@ repos:
         args: [--fix=lf]
       - id: trailing-whitespace
         name: pre-commit-hooks/trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.16.0
+    rev: v3.15.2
     hooks:
       - id: pyupgrade
-        args: [--py38-plus]
-
-  - repo: https://github.com/myint/unify
-    rev: v0.5
-    hooks:
-      - id: unify
-        args: [--in-place, --quote="]
+        args: [--py311-plus, --keep-runtime-typing]
 
   - repo: https://github.com/jendrikseipp/vulture
     rev: v2.11
     hooks:
       - id: vulture
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
 
   - repo: https://github.com/asottile/yesqa
     rev: v1.5.0
