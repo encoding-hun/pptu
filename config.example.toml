@@ -44,3 +44,13 @@ passkey = "" # required for credential auth, auto-detected when using cookies
 img_uploader = "ptpimg"
 # personal_rip_tags = ["MYGRP"]
 # proxy = "http://user:pass@example.com:6060"
+
+[ncore]
+username = ""
+password = ""
+img_uploader = "keksh"
+totp_secret = ""
+description = true # port, mafab, true, false
+snapshot_rows = 3 # default is 3 suggested to not use more
+anonymous_upload = false # default is false
+# proxy = "http://user:pass@example.com:6060"
