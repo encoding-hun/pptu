@@ -60,12 +60,15 @@ class PPTU:
             self.num_snapshots = tracker.min_snapshots or 0
 
     def create_torrent(self) -> bool:
+        torrent_creator: str = self.config.get("default", "torrent_creator", "torf")
         announce_url: list = as_list(self.tracker.announce_url)
 
         passkey = self.config.get(self.tracker, "passkey") or self.tracker.passkey
         if not passkey and any("{passkey}" in x for x in announce_url):
             eprint(f"Passkey not found for tracker [cyan]{self.tracker.name}[cyan].")
             return False
+
+        announce_url = [x.format(passkey=passkey) for x in announce_url]
 
         base_torrent_path = next(
             iter(
@@ -79,57 +82,109 @@ class PPTU:
         if self.torrent_path.exists():
             return True
 
-        torrent = Torrent(
-            self.path,
-            trackers=[x.format(passkey=passkey) for x in announce_url],
-            private=True,
-            source=self.tracker.source,
-            created_by=None,
-            creation_date=None,
-            randomize_infohash=not self.tracker.source,
-            exclude_regexs=[self.tracker.exclude_regexs],
-        )
+        if torrent_creator == "torf":
+            torrent = Torrent(
+                self.path,
+                trackers=announce_url,
+                private=True,
+                source=self.tracker.source,
+                created_by=None,
+                creation_date=None,
+                randomize_infohash=not self.tracker.source,
+                exclude_regexs=[self.tracker.exclude_regexs],
+            )
 
-        if base_torrent_path:
-            torrent.reuse(base_torrent_path)
-            try:
-                torrent.validate()
-            except torf.MetainfoError:
-                wprint("Torrent file is invalid, recreating")
+            if base_torrent_path:
+                torrent.reuse(base_torrent_path)
+                try:
+                    torrent.validate()
+                except torf.MetainfoError:
+                    wprint("Torrent file is invalid, recreating")
+                else:
+                    torrent.trackers = announce_url
+                    torrent.randomize_infohash = True
+                    torrent.source = self.tracker.source
+                    torrent.private = True
+                    torrent.write(self.torrent_path)
             else:
-                torrent.trackers = [self.tracker.announce_url.format(passkey=passkey)]
-                torrent.randomize_infohash = True
-                torrent.source = self.tracker.source
-                torrent.private = True
-                torrent.write(self.torrent_path)
+                print()
+                with Progress(
+                    BarColumn(),
+                    CustomTransferSpeedColumn(),
+                    TaskProgressColumn(),
+                    TimeRemainingColumn(elapsed_when_finished=True),
+                ) as progress:
+                    files = []
+
+                    def update_progress(
+                        torrent: Torrent,
+                        filepath: str,
+                        pieces_done: int,
+                        pieces_total: int,
+                    ) -> None:
+                        if filepath not in files:
+                            print(f"Hashing {Path(filepath).name}...")
+                            files.append(filepath)
+
+                        progress.update(
+                            task,
+                            completed=pieces_done * torrent.piece_size,
+                            total=pieces_total * torrent.piece_size,
+                        )
+
+                    task = progress.add_task(description="")
+                    torrent.generate(callback=update_progress)
+                    torrent.write(self.torrent_path)
+
+            return True
+        elif torrent_creator == "torrenttools":
+            if base_torrent_path:
+                subprocess.run(
+                    [
+                        "torrenttools",
+                        "edit",
+                        "--no-created-by",
+                        "--no-creation-date",
+                        "--announce",
+                        " ".join(announce_url),
+                        "-s",
+                        self.tracker.source,
+                        "--private",
+                        "on",
+                        "--output",
+                        self.torrent_path,
+                        base_torrent_path,
+                    ],
+                    check=True,
+                )
+            else:
+                subprocess.run(
+                    [
+                        "torrenttools",
+                        "create",
+                        "--no-created-by",
+                        "--no-creation-date",
+                        "--no-cross-seed",
+                        "--exclude",
+                        r".*\.(ffindex|jpg|nfo|png|srt|torrent|txt)$",
+                        "--announce",
+                        " ".join(announce_url),
+                        "-s",
+                        self.tracker.source,
+                        "--private",
+                        "on",
+                        "--piece-size",
+                        "16M",
+                        "--output",
+                        self.torrent_path,
+                        self.path,
+                    ],
+                    check=True,
+                )
+
+            return self.torrent_path.exists()
         else:
-            print()
-            with Progress(
-                BarColumn(),
-                CustomTransferSpeedColumn(),
-                TaskProgressColumn(),
-                TimeRemainingColumn(elapsed_when_finished=True),
-            ) as progress:
-                files = []
-
-                def update_progress(
-                    torrent: Torrent, filepath: str, pieces_done: int, pieces_total: int
-                ) -> None:
-                    if filepath not in files:
-                        print(f"Hashing {Path(filepath).name}...")
-                        files.append(filepath)
-
-                    progress.update(
-                        task,
-                        completed=pieces_done * torrent.piece_size,
-                        total=pieces_total * torrent.piece_size,
-                    )
-
-                task = progress.add_task(description="")
-                torrent.generate(callback=update_progress)
-                torrent.write(self.torrent_path)
-
-        return True
+            eprint(f"Invalid torrent creator: {torrent_creator}", fatal=True)
 
     def get_mediainfo(self) -> str | list[str]:
         mediainfo_path = self.cache_dir / "mediainfo.txt"

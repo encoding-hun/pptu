@@ -5,6 +5,7 @@ fast_upload = false
 snapshots = true
 snapshot_columns = 3
 snapshot_rows = 2
+torrent_creator = "torf" # torf, torrenttools
 snapshot_row_width = 1000 # will be lowered if it's higher than the site's width for the torrent page
 
 # Image uploaders
