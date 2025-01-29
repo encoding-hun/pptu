@@ -6,9 +6,6 @@ import subprocess
 from pathlib import Path
 
 
-print("[*] Updating pywidevine submodule")
-subprocess.run(["git", "submodule", "update", "--init"], check=True)
-
 print("\n[*] Installing dependencies")
 subprocess.run(["poetry", "install"], check=True)
 
