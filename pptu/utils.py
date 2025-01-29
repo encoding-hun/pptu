@@ -7,11 +7,11 @@ import os
 import re
 import shutil
 import sys
+from collections.abc import Iterable
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, IO, Literal, NoReturn, overload
-from collections.abc import Iterable
 from re import Pattern
+from typing import TYPE_CHECKING, Any, IO, Literal, NoReturn, overload
 
 import humanize
 import oxipng
@@ -166,7 +166,7 @@ class Img:
 
     def keksh(self, files: list[Path]) -> list[dict[Any, Any] | None] | None:
         res = []
-        headers = dict()
+        headers = {}
 
         if self.api_key:
             headers = {"x-kek-auth": self.api_key}

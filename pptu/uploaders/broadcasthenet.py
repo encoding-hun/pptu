@@ -5,7 +5,6 @@ import re
 import subprocess
 from typing import TYPE_CHECKING, Any
 
-import httpx
 from guessit import guessit
 from langcodes import Language
 from pyotp import TOTP
@@ -25,7 +24,7 @@ class BroadcasTheNetUploader(Uploader):
     announce_url: str = "https://landof.tv/{passkey}/announce"
     exclude_regexs: str = r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
 
-    COUNTRY_MAP: dict = {
+    COUNTRY_MAP: dict[str, int] = {
         "AD": 65,
         "AF": 51,
         "AG": 86,
@@ -131,13 +130,6 @@ class BroadcasTheNetUploader(Uploader):
         "ZA": 26,
     }
 
-    def keksh(self, file) -> str | None:
-        files = {"file": open(file, "rb")}
-        res: dict = httpx.post(url="https://kek.sh/api/v1/posts", files=files).json()
-
-        if res.get("filename"):
-            return f"https://i.kek.sh/{res['filename']}"
-
     @property
     def passkey(self) -> str | None:
         res = self.session.get("https://backup.landof.tv/upload.php").text
@@ -145,6 +137,7 @@ class BroadcasTheNetUploader(Uploader):
         if not (el := soup.select_one("input[value$='/announce']")):
             eprint("Failed to get announce URL.")
             return None
+
         return el.attrs["value"].split("/")[-2]
 
     def login(self, *, auto: Any) -> bool:
@@ -336,10 +329,10 @@ class BroadcasTheNetUploader(Uploader):
         if self.config.get(self, "img_uploader"):
             uploader = Img(self)
             snapshot_urls = []
-            for snap in uploader.upload(snapshots):
+            for snapshot in uploader.upload(snapshots):
                 snapshot_urls.append(
-                    f"https://i.kek.sh/{snap['filename']}"
-                    if snap.get("filename")
+                    f"https://i.kek.sh/{snapshot['filename']}"
+                    if snapshot.get("filename")
                     else ""
                 )
 
@@ -362,9 +355,9 @@ class BroadcasTheNetUploader(Uploader):
                 )
 
             for i in range(len(snapshots)):
-                snap = snapshot_urls[i]
+                snapshot = snapshot_urls[i]
                 thumb = thumbnail_urls[i]
-                thumbnails_str += rf"[url={snap}][img]{thumb}[/img][/url]"
+                thumbnails_str += rf"[url={snapshot}][img]{thumb}[/img][/url]"
                 if i % self.config.get(self, "snapshot_columns", 2) == 0:
                     thumbnails_str += " "
                 else:

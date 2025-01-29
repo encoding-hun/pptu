@@ -1,9 +1,9 @@
 from __future__ import annotations
-from typing import Any
 
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import httpx
 import requests
@@ -250,9 +250,9 @@ class nCoreUploader(Uploader):
                 info_.get("description", "").replace("\r\n", " ").strip()
             )
             return_data["genre"] = info_.get("genre", "").split()
-        cat = soup.find("div", class_="summary")
-        if cat and (cat_ := cat.find("span")):
-            temp = cat_.text.split(",")
+        category = soup.find("div", class_="summary")
+        if category and (category_ := category.find("span")):
+            temp = category_.text.split(",")
             return_data["year"] = temp[-1].strip()
             return_data["genre"] = (temp[0] or "").split(" ")
 
@@ -392,13 +392,14 @@ class nCoreUploader(Uploader):
         print(f"IMDb ID: [bold cyan]{imdb_id}[/]")
 
         self.imdb_ajax_data = self.session.get(
-            url=f"https://ncore.pro/ajax.php?action=imdb_movie&imdb_movie={imdb_id.strip('tt')}",
+            url=f"https://ncore.pro/ajax.php?action=imdb_movie&imdb_movie={imdb_id.lstrip('t')}",
         ).text
 
         if path.is_dir():
             file = sorted([*path.glob("*.mkv"), *path.glob("*.mp4")])[0]
         else:
             file = path
+
         with Status("[bold magenta]Parsing for info scraping...") as _:
             m_info_temp: str = MediaInfo.parse(file, output="JSON", full=True)
             if m_info_temp:

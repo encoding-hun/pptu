@@ -10,7 +10,7 @@ from imdb import Cinemagoer
 from pyotp import TOTP
 from rich.prompt import Prompt
 
-from ..utils import Img, eprint, load_html, print, similar, wprint
+from ..utils import Img, eprint, load_html, print, wprint
 from . import Uploader
 
 
@@ -242,9 +242,9 @@ class HDBitsUploader(Uploader):
 
                 if imdb_results := ia.search_movie(title):
                     # needs more testing
-                    #imdb_results.sort(
+                    # imdb_results.sort(
                     #    key=lambda x: similar(x.data["title"], title), reverse=True
-                    #)
+                    # )
                     imdb = f"https://www.imdb.com/title/tt{imdb_results[0].movieID}/"
             else:
                 wprint("Unable to extract title from filename.")
@@ -371,10 +371,12 @@ class HDBitsUploader(Uploader):
             },
             data=self.data,
         ).text
+
         soup = load_html(res)
         if not (el := soup.select_one(".js-download")):
             eprint("Failed to get torrent download URL.")
             return False
+
         torrent_url = f"https://hdbits.org{el.attrs['href']}"
         torrent_path.write_bytes(self.session.get(torrent_url).content)
 

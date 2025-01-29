@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 from ..utils import pluralize
-from ._base import Uploader # noqa: F401
+from ._base import Uploader  # noqa: F401
 
 
 # Load all services
