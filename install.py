@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 print("\n[*] Installing dependencies")
-subprocess.run(["uv", "sync", "--frozen", "--link-mode=copy"], check=True)
+subprocess.run(["uv", "sync", "--frozen"], check=True)
 
 if platform.system() != "Windows":
     d = Path("~/.local/bin").expanduser()
