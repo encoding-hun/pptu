@@ -13,15 +13,30 @@ import torf
 from platformdirs import PlatformDirs
 from pymediainfo import MediaInfo
 from pyrosimple.util.metafile import Metafile
-from rich.progress import BarColumn, MofNCompleteColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    TaskProgressColumn,
+    TextColumn,
+    TimeRemainingColumn,
+)
 from torf import Torrent
 from wand.image import Image
 
-from .utils import Config, CustomTransferSpeedColumn, as_list, eprint, flatten, wprint
+from pptu.utils import (
+    Config,
+    CustomTransferSpeedColumn,
+    as_list,
+    eprint,
+    flatten,
+    which,
+    wprint,
+)
 
 
 if TYPE_CHECKING:
-    from .uploaders import Uploader
+    from pptu.uploaders import Uploader
 
 
 class PPTU:
@@ -33,19 +48,19 @@ class PPTU:
         note: str | None = None,
         auto: bool = False,
         snapshots: bool = False,
+        dirs: PlatformDirs | None = None,
     ):
         self.path = path
         self.tracker = tracker
         self.note = note
         self.auto = auto
 
-        dirs = PlatformDirs(appname="pptu", appauthor=False)
         self.cache_dir = dirs.user_cache_path / f"{path.name}_files"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.config = Config(dirs.user_config_path / "config.toml")
 
         self.torrent_path = (
-            self.cache_dir / f"{self.path.name}[{self.tracker.abbrev}].torrent"
+            self.cache_dir / f"{self.path.name}[{self.tracker.cli.aliases[0]}].torrent"
         )
         if snapshots and self.config.get(tracker, "snapshots", True):
             self.num_snapshots = max(
@@ -61,11 +76,11 @@ class PPTU:
 
     def create_torrent(self) -> bool:
         torrent_creator: str = self.config.get("default", "torrent_creator", "torf")
-        announce_url: list = as_list(self.tracker.announce_url)
+        announce_url: list[str] = as_list(self.tracker.announce_url)
 
         passkey = self.config.get(self.tracker, "passkey") or self.tracker.passkey
         if not passkey and any("{passkey}" in x for x in announce_url):
-            eprint(f"Passkey not found for tracker [cyan]{self.tracker.name}[cyan].")
+            eprint(f"Passkey not found for tracker [cyan]{self.tracker.cli.name}[cyan].")
             return False
 
         announce_url = [x.format(passkey=passkey) for x in announce_url]
@@ -91,7 +106,7 @@ class PPTU:
                 created_by=None,
                 creation_date=None,
                 randomize_infohash=not self.tracker.source,
-                exclude_regexs=[self.tracker.exclude_regexs],
+                exclude_regexs=[self.tracker.exclude_regex],
             )
 
             if base_torrent_path:
@@ -138,17 +153,19 @@ class PPTU:
 
             return True
         elif torrent_creator == "torrenttools":
+            if not (executable := which("torrenttools")):
+                eprint("torrenttools not found in PATH", fatal=True)
+
             if base_torrent_path:
                 subprocess.run(
                     [
-                        "torrenttools",
+                        executable,
                         "edit",
                         "--no-created-by",
                         "--no-creation-date",
                         "--announce",
                         " ".join(announce_url),
-                        "-s",
-                        self.tracker.source,
+                        *(["-s", self.tracker.source] if self.tracker.source else []),
                         "--private",
                         "on",
                         "--output",
@@ -160,7 +177,7 @@ class PPTU:
             else:
                 subprocess.run(
                     [
-                        "torrenttools",
+                        executable,
                         "create",
                         "--no-created-by",
                         "--no-creation-date",
@@ -169,8 +186,7 @@ class PPTU:
                         r".*\.(ffindex|jpg|nfo|png|srt|torrent|txt)$",
                         "--announce",
                         " ".join(announce_url),
-                        "-s",
-                        self.tracker.source,
+                        *(["-s", self.tracker.source] if self.tracker.source else []),
                         "--private",
                         "on",
                         "--piece-size",
@@ -229,7 +245,7 @@ class PPTU:
         orig_files = files[:]
         i = 2
         while len(files) < num_snapshots:
-            files = flatten(zip(*([orig_files] * i)))
+            files = flatten(zip(*([orig_files] * i), strict=True))
             i += 1
 
         snapshots = []
@@ -245,7 +261,7 @@ class PPTU:
             ) as progress:
                 for i in progress.track(
                     range(num_snapshots),
-                    description=f"[bold green]Generating snapshots ({self.tracker.abbrev})[/]",
+                    description=f"[bold green]Generating snapshots ({self.tracker.cli.aliases[0]})[/]",
                 ):
                     mediainfo_obj = MediaInfo.parse(files[i])
                     if not mediainfo_obj.video_tracks:
@@ -305,7 +321,7 @@ class PPTU:
 
         return snapshots
 
-    def prepare(self, mediainfo: str | list[str], snapshots: list[Path]) -> bool:
+    def prepare(self, mediainfo: str | list[str] | None, snapshots: list[Path]) -> bool:
         if not self.tracker.prepare(
             self.path,
             self.torrent_path,
@@ -314,11 +330,11 @@ class PPTU:
             note=self.note,
             auto=self.auto,
         ):
-            eprint(f"Preparing upload to [cyan]{self.tracker.name}[/] failed.")
+            eprint(f"Preparing upload to [cyan]{self.tracker.cli.name}[/] failed.")
             return False
         return True
 
-    def upload(self, mediainfo: str | list[str], snapshots: list[Path]) -> None:
+    def upload(self, mediainfo: str | list[str] | None, snapshots: list[Path]) -> None:
         if not self.tracker.upload(
             self.path,
             self.torrent_path,
@@ -327,11 +343,11 @@ class PPTU:
             note=self.note,
             auto=self.auto,
         ):
-            eprint(f"Upload to [cyan]{self.tracker.name}[/] failed.")
+            eprint(f"Upload to [cyan]{self.tracker.cli.name}[/] failed.")
             return
 
         torrent_path = (
-            self.cache_dir / f"{self.path.name}[{self.tracker.abbrev}].torrent"
+            self.cache_dir / f"{self.path.name}[{self.tracker.cli.aliases[0]}].torrent"
         )
         if watch_dir := self.config.get(self.tracker, "watch_dir"):
             watch_dir = Path(watch_dir).expanduser()
@@ -342,4 +358,4 @@ class PPTU:
             shutil.copy(resume_path, watch_dir)
 
     def __str__(self) -> str:
-        return f"{self.tracker.abbrev} ({self.torrent_path})"
+        return f"{self.tracker.cli.aliases[0]} ({self.torrent_path})"

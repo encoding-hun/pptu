@@ -1,9 +1,25 @@
-from ._avistaznetwork import AvistaZNetworkUploader
+from types import SimpleNamespace
+from typing import Any
+
+import cloup
+
+from pptu.uploaders._avistaznetwork import AvistaZNetwork, common_options
 
 
-class AvistaZUploader(AvistaZNetworkUploader):
-    name: str = "AvistaZ"
-    abbrev: str = "AvZ"
+class AvistaZ(AvistaZNetwork):
+    @staticmethod
+    @cloup.command(
+        name="AvistaZ",
+        aliases=["AvZ"],
+        short_help="https://avistaz.to/",
+        help=__doc__,
+    )
+    @common_options
+    def cli(ctx: cloup.Context, **kwargs: Any) -> "AvistaZ":
+        return AvistaZ(ctx, SimpleNamespace(**kwargs))
 
-    year_in_series_name: bool = True
-    keep_dubbed_dual_tags: bool = True
+    def __init__(self, ctx: cloup.Context, args: Any) -> None:
+        super().__init__(ctx, args)
+
+        self.year_in_series_name: bool = True
+        self.keep_dubbed_dual_tags: bool = True

@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import re
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
+import cloup
 from imdb import Cinemagoer
 from pymediainfo import MediaInfo
 from pyotp import TOTP
 from rich.markup import escape
 from rich.prompt import Prompt
 
-from ..utils import Img, eprint, load_html, print, wprint
-from . import Uploader
+from pptu.uploaders import Uploader
+from pptu.utils import ImgUploader, eprint, load_html, print, wprint
 
 
 if TYPE_CHECKING:
@@ -20,12 +22,8 @@ if TYPE_CHECKING:
 ia = Cinemagoer()
 
 
-class PassThePopcornUploader(Uploader):
-    name: str = "PassThePopcorn"
-    abbrev: str = "PTP"
+class PassThePopcorn(Uploader):
     source: str = "PTP"
-    announce_url: str = "http://please.passthepopcorn.me:2710/{passkey}/announce"  # HTTPS tracker cert is expired
-    exclude_regexs: str = r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
     all_files: bool = True
 
     # TODO: Some of these have potential for false positives if they're in the movie name
@@ -49,20 +47,57 @@ class PassThePopcornUploader(Uploader):
         r"(?i)\.Hybrid\.": "Hybrid",
     }
 
-    def __init__(self) -> None:
-        super().__init__()
+    @staticmethod
+    @cloup.command(
+        name="PassThePopcorn",
+        aliases=["PTP"],
+        short_help="https://passthepopcorn.me/",
+        help=__doc__,
+    )
+    @cloup.option(
+        "--type",
+        type=cloup.Choice(
+            [
+                "Feature Film",
+                "Short Film",
+                "Miniseries",
+                "Stand-up Comedy",
+                "Live Performance",
+                "Movie Collection",
+            ]
+        ),
+        default=None,
+        help="Content type.",
+    )
+    @cloup.pass_context
+    def cli(ctx: cloup.Context, **kwargs: Any) -> PassThePopcorn:
+        return PassThePopcorn(ctx, SimpleNamespace(**kwargs))
+
+    def __init__(self, ctx: cloup.Context, args: Any) -> None:
+        super().__init__(ctx)
+
+        self.type = args.type
+
         self.anti_csrf_token: str | None = None
 
     @property
-    def passkey(self) -> str | None:
-        r = self.session.get("https://passthepopcorn.me/upload.php")
-        soup = load_html(r.text)
-        if not (el := soup.select_one("input[value$='/announce']")):
-            eprint("Failed to get announce URL.")
-            return None
-        return el.attrs["value"].split("/")[-2]
+    def announce_url(self) -> str:
+        return "http://please.passthepopcorn.me:2710/{passkey}/announce"  # HTTPS tracker cert is expired
 
-    def login(self, *, args: Any) -> bool:
+    @property
+    def exclude_regex(self) -> str:
+        return r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
+
+    @property
+    def passkey(self) -> str | None:
+        if res := self.session.get("https://passthepopcorn.me/upload.php").text:
+            soup = load_html(res)
+            if not (el := soup.select_one("input[value$='/announce']")):
+                return None
+            return el.attrs["value"].split("/")[-2]
+        return None
+
+    def login(self, *, args: Any = None) -> bool:
         r = self.session.get(
             "https://passthepopcorn.me/user.php?action=edit", allow_redirects=False
         )
@@ -86,7 +121,10 @@ class PassThePopcornUploader(Uploader):
         totp_secret = self.config.get(self, "totp_secret")
 
         res = self.session.post(
-            url="https://passthepopcorn.me/ajax.php?action=login",
+            url="https://passthepopcorn.me/ajax.php",
+            params={
+                "action": "login",
+            },
             data={
                 "Popcron": "",
                 "username": username,
@@ -111,7 +149,10 @@ class PassThePopcornUploader(Uploader):
                 return False
             tfa_code = Prompt.ask("Enter 2FA code")
             res = self.session.post(
-                url="https://passthepopcorn.me/ajax.php?action=login",
+                url="https://passthepopcorn.me/ajax.php",
+                params={
+                    "action": "login",
+                },
                 data={
                     "Popcron": "",
                     "username": username,
@@ -219,29 +260,43 @@ class PassThePopcornUploader(Uploader):
         any_sub = any(x for x in mediainfo_obj.text_tracks)
 
         snapshot_urls = []
-        uploader = Img(self)
+        uploader = ImgUploader(self)
         for snap in uploader.upload(snapshots):
-            snapshot_urls.append(
-                f'https://ptpimg.me/{snap[0]["code"]}.{snap[0]["ext"]}'
-            )
+            snapshot_urls.append(f"https://ptpimg.me/{snap[0]['code']}.{snap[0]['ext']}")
 
-        if re.search(r"\.S\d+\.", str(path)):
-            print("Detected series")
-            type_ = "Miniseries"
-            desc = ""
-            for i in range(len(mediainfo)):
-                desc += "[mi]\n{mediainfo}\n[/mi]\n{snapshots}\n\n".format(
-                    mediainfo=mediainfo[i],
-                    snapshots=snapshot_urls[i],
+        desc = ""
+        if not self.type:
+            if re.search(r"\.S\d+\.", str(path)):
+                print("Detected series")
+                type_ = "Miniseries"
+                for i in range(len(mediainfo)):
+                    desc += "[mi]\n{mediainfo}\n[/mi]\n{snapshots}\n\n".format(
+                        mediainfo=mediainfo[i],
+                        snapshots=snapshot_urls[i],
+                    )
+            else:
+                # TODO: Detect other types
+                print("Detected movie")
+                type_ = "Feature Film"
+                desc = "[mi]\n{mediainfo}\n[/mi]\n{snapshots}".format(
+                    mediainfo=mediainfo[0],
+                    snapshots="\n".join(snapshot_urls),
                 )
         else:
-            # TODO: Detect other types
-            print("Detected movie")
-            type_ = "Feature Film"
-            desc = "[mi]\n{mediainfo}\n[/mi]\n{snapshots}".format(
-                mediainfo=mediainfo[0],
-                snapshots="\n".join(snapshot_urls),
-            )
+            print(f"Selected type: {self.type}")
+            type_ = self.type
+            if type_ in ("Movie Collection", "Miniseries"):
+                for i in range(len(mediainfo)):
+                    desc += "[mi]\n{mediainfo}\n[/mi]\n{snapshots}\n\n".format(
+                        mediainfo=mediainfo[i],
+                        snapshots=snapshot_urls[i],
+                    )
+            else:
+                desc = "[mi]\n{mediainfo}\n[/mi]\n{snapshots}".format(
+                    mediainfo=mediainfo[0],
+                    snapshots="\n".join(snapshot_urls),
+                )
+
         if note:
             desc = f"[quote]{note}[/quote]\n{desc}"
         desc = desc.strip()
@@ -262,6 +317,7 @@ class PassThePopcornUploader(Uploader):
             source = "VHS"
         else:
             source = "Other"
+
         print(f"Detected source: [bold cyan]{source}[/]")
 
         tag = (path.name if path.is_dir() else path.stem).split("-")[-1]

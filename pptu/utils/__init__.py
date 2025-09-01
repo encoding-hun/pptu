@@ -10,14 +10,16 @@ import sys
 from collections.abc import Iterable
 from difflib import SequenceMatcher
 from pathlib import Path
-from re import Pattern
-from typing import TYPE_CHECKING, Any, IO, Literal, NoReturn, overload
+from typing import TYPE_CHECKING, Any, IO, Literal, NoReturn, overload, Mapping
 
+import click
+import cloup
 import humanize
 import oxipng
 import toml
+import orjson
 from bs4 import BeautifulSoup
-from requests.utils import CaseInsensitiveDict
+from ordered_set import OrderedSet
 from rich.console import Console
 from rich.progress import (
     BarColumn,
@@ -31,13 +33,11 @@ from rich.progress import (
 from rich.text import Text
 from wand.image import Image
 
-from .constants import PROG_NAME, PROG_VERSION
-
 
 if TYPE_CHECKING:
     from rich.progress import Task
 
-    from .uploaders import Uploader
+    from pptu.uploaders import Uploader
 
 
 class Config:
@@ -48,9 +48,7 @@ class Config:
             shutil.copy(
                 Path(__file__).resolve().parent.with_name("config.example.toml"), file
             )
-            eprint(
-                f"Config file doesn't exist, created to: [cyan]{file}[/]", fatal=True
-            )
+            eprint(f"Config file doesn't exist, created to: [cyan]{file}[/]", fatal=True)
 
     def get(
         self,
@@ -62,8 +60,8 @@ class Config:
         if isinstance(tracker, str) and tracker != "default":
             value = self._config.get(tracker, {}).get(key)
         elif tracker != "default":
-            value = self._config.get(tracker.name, {}).get(key) or self._config.get(
-                tracker.abbrev, {}
+            value = self._config.get(tracker.cli.name, {}).get(key) or self._config.get(
+                tracker.cli.aliases[0], {}
             ).get(key)
 
         if value is False:
@@ -73,32 +71,6 @@ class Config:
             return defa
 
         return value or defa or default
-
-
-class RParse(argparse.ArgumentParser):
-    def __init__(self, *args: Any, **kwargs: Any):
-        kwargs.setdefault("formatter_class", lambda prog: CustomHelpFormatter(prog))
-        super().__init__(*args, **kwargs)
-
-    def _print_message(self, message: str, file: IO[str] | None = None) -> None:
-        if message:
-            if message.startswith("usage"):
-                message = f"[bold cyan]{PROG_NAME}[/] {PROG_VERSION}\n\n{message}"
-                message = re.sub(
-                    r"(-[a-z]+\s*|\[)([A-Z]+)(?=]|,|\s\s|\s\.)",
-                    r"\1[bold color(231)]\2[/]",
-                    message,
-                )
-                message = re.sub(r"((-|--)[a-z]+)", r"[green]\1[/]", message)
-                message = message.replace("usage", "[yellow]USAGE[/]")
-                message = message.replace(
-                    "positional arguments", "[yellow]POSITIONAL ARGUMENTS[/]"
-                )
-                message = message.replace("options", "[yellow]FLAGS[/]", 1)
-                message = message.replace(" file ", "[bold magenta] file [/]", 2)
-                message = message.replace(self.prog, f"[bold cyan]{self.prog}[/]")
-            message = f"[not bold default]{message.strip()}[/]"
-            print(message)
 
 
 class CustomHelpFormatter(argparse.RawTextHelpFormatter):
@@ -123,20 +95,24 @@ class CustomTransferSpeedColumn(ProgressColumn):
         return Text(f"{data_speed}/s", style="progress.data.speed")
 
 
-class Img:
+class ImgUploader:
     def __init__(self, tracker: Uploader):
         self.tracker = tracker
         self.uploader = tracker.config.get(tracker, "img_uploader")
         key_ = f"{self.uploader}_api_key"
         self.api_key = (
-            tracker.config.get("img_uploaders", key_, None)
+            tracker.config.get("img_uploader", key_, None)
             or os.environ.get(key_.upper())
             or None
         )
 
     def hdbimg(
-        self, files: list[Path], thumbnail_width: int = 220, name: str = ""
+        self, files: list[Path], thumbnail_width: int, name: str
     ) -> list[Any | None] | None:
+        if self.tracker.cli.name != "HDBits":
+            eprint("HDBImg uploader can only be used for HDBits!")
+            return []
+
         with (
             Console().status("Uploading snapshots..."),
             contextlib.ExitStack() as stack,
@@ -234,7 +210,7 @@ class Img:
         elif self.uploader == "ptpimg":
             return self.ptpimg(files)
         elif self.uploader == "hdbimg":
-            return self.hdbimg(files, thumbnail_width, name)
+            return self.hdbimg(files, thumbnail_width or 220, name or "")
         else:
             if not self.uploader:
                 wprint("Img uploader missing for from config!")
@@ -242,6 +218,10 @@ class Img:
                 wprint("Set Img uploader doesn't exist!")
 
             return []
+
+
+def dict_to_json(data: Mapping[Any, Any]) -> str:
+    return orjson.dumps(data).decode()
 
 
 def flatten(L: Iterable[Any]) -> list[Any]:
@@ -303,7 +283,7 @@ def first_or_none(iterable: Iterable[Any]) -> Any | None:
 
 
 def find(
-    pattern: Pattern, string: str, group: int | None = None, flags: Any = 0
+    pattern: str, string: str, group: int | None = None, flags: Any = 0
 ) -> str | None:
     if group:
         if m := re.search(pattern, string, flags=flags):
@@ -344,6 +324,7 @@ def generate_thumbnails(
                     img.save(filename=thumb)
                 if file_type == "png":
                     oxipng.optimize(thumb)
+
             thumbnails.append(thumb)
 
     return thumbnails
@@ -376,3 +357,57 @@ def as_list(*args: Any) -> list[Any]:
 
 def similar(x: str, y: str) -> float:
     return SequenceMatcher(None, x, y).ratio()
+
+
+class AliasedGroup(cloup.Group):
+    def __init__(self, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+
+        self.alias2name = CaseInsensitiveDict()
+
+    def add_command(self, cmd: click.Command, name: str, **kwargs: Any):
+        super().add_command(cmd, name, **kwargs)
+
+        # Allow the main command name to be used case-insensitively
+        name = name or cmd.name
+        self.alias2name[name] = name
+
+    def handle_bad_command_name(self, valid_names: list[str], **kwargs: Any):
+        # Filter out aliases from the error message
+        # TODO: Figure out why commands are duplicated
+        return super().handle_bad_command_name(
+            valid_names=OrderedSet(x for x in valid_names if x in self.commands),
+            **kwargs,
+        )
+
+    def resolve_command(
+        self, ctx: click.Context, args: Any
+    ) -> tuple[str | None, click.Command | None, list[str]]:
+        # Always return the full command name
+        _, cmd, args = super().resolve_command(ctx, args)
+        return cmd.name, cmd, args
+
+
+class CaseInsensitiveSection(cloup.Section):
+    def list_commands(self):
+        return sorted(super().list_commands(), key=lambda x: x[0].casefold())
+
+
+class CaseInsensitiveDict(dict[str, Any]):
+    def __getitem__(self, key: str) -> Any:
+        return super().__getitem__(key.lower())
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        super().__setitem__(key.lower(), value)
+
+    def get(self, key: str, default: Any | None = None) -> Any:
+        return super().get(key.lower(), default)
+
+
+def which(*executables):
+    return first_or_none(
+        sorted(
+            (Path(x) for x in (shutil.which(x) for x in executables) if x),
+            key=lambda x: os.environ["PATH"].split(os.pathsep).index(str(x.parent)),
+        ),
+    )

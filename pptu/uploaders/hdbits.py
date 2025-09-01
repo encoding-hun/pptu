@@ -3,15 +3,17 @@ from __future__ import annotations
 import hashlib
 import re
 import time
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
+import cloup
 from guessit import guessit
 from imdb import Cinemagoer
 from pyotp import TOTP
 from rich.prompt import Prompt
 
-from ..utils import Img, eprint, load_html, print, wprint
-from . import Uploader
+from pptu.uploaders import Uploader
+from pptu.utils import ImgUploader, eprint, load_html, print, wprint
 
 
 if TYPE_CHECKING:
@@ -21,13 +23,9 @@ if TYPE_CHECKING:
 ia = Cinemagoer()
 
 
-class HDBitsUploader(Uploader):
-    name: str = "HDBits"
-    abbrev: str = "HDB"
-    source: str = "HDBits"
-    announce_url: str = "https://tracker.hdbits.org/announce.php"
+class HDBits(Uploader):
+    source = "HDBits"
     min_snapshots = 4  # 2 for movies and single episodes
-    exclude_regexs: str = r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
 
     CAPTCHA_MAP = {
         "efe8518424149278ddfaaf609b6a0b1a4749f61b61ef28824da67d68fb333af3": "bug",
@@ -71,6 +69,8 @@ class HDBitsUploader(Uploader):
         r"\bHLG\b": 10,  # HLG
         r"\bIMAX\b": 14,  # IMAX
         r"\bOM\b": 58,  # Open Matte
+        r"\bTC\b|(?i)\btheatrical\b": 94,  # Theatrical Cut
+        r"\bDC\b": 93,  # Director's Cut
         # Streaming services
         r"\bAMZN\b": 28,  # Amazon
         r"\bATVP\b": 27,  # Apple TV+
@@ -82,6 +82,7 @@ class HDBitsUploader(Uploader):
         r"\bFUNI\b": 74,  # Funimation
         r"\bHLMK\b": 71,  # Hallmark Channel
         r"\bHMAX\b": 30,  # HBO Max
+        r"\bMAX\b": 88,  # MAX
         r"\bHS\b": 79,  # Hotstar
         r"\bHULU\b": 34,  # Hulu
         r"\biP\b": 56,  # BBC iPlayer
@@ -92,11 +93,43 @@ class HDBitsUploader(Uploader):
         r"\bPMTP\b": 69,  # Paramount+
         r"\bSHO\b": 76,  # Showtime
         r"\bSTAN\b": 32,  # Stan
+        r"\bROKU\b": 87,  # Roku
+        r"\bALL4\b": 107,  # Channel4
+        r"\bNOW\b": 96,  # NOW
     }
 
-    def login(self, *, args: Any) -> bool:
+    @staticmethod
+    @cloup.command(
+        name="HDBits",
+        aliases=["HDB"],
+        short_help="https://hdbits.org/",
+        help=__doc__,
+    )
+    @cloup.pass_context
+    def cli(ctx: cloup.Context, **kwargs: Any) -> HDBits:
+        return HDBits(ctx, SimpleNamespace(**kwargs))
+
+    def __init__(self, ctx: cloup.Context, args: Any) -> None:
+        super().__init__(ctx)
+
+    @property
+    def announce_url(self) -> str:
+        return "https://tracker.hdbits.org/announce.php"
+
+    @property
+    def exclude_regex(self) -> str:
+        return r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
+
+    @property
+    def passkey(self) -> str | None:
+        if res := self.session.get("https://hdbits.org/").text:
+            if m := re.search(r"passkey=([a-f0-9]+)", res):
+                return m.group(1)
+        return None
+
+    def login(self, *, args: Any = None) -> bool:
         r = self.session.get("https://hdbits.org")
-        if not r.url.startswith("https://hdbits.org/login"):
+        if not str(r.url).startswith("https://hdbits.org/login"):
             return True
 
         wprint("Cookies missing or expired, logging in...")
@@ -106,29 +139,29 @@ class HDBitsUploader(Uploader):
         ).json()
         correct_hash = None
         for image in captcha["images"]:
-            r = self.session.get(
+            if r := self.session.get(
                 "https://hdbits.org/simpleCaptcha.php", params={"hash": image}
-            )
-            if (
-                self.CAPTCHA_MAP.get(hashlib.sha256(r.content).hexdigest())
-                == captcha["text"]
-            ):
-                correct_hash = image
-                print(
-                    f"Found captcha solution: [bold cyan]{captcha['text']}[/] ([cyan]{correct_hash}[/])"
-                )
-                break
+            ).content:
+                if self.CAPTCHA_MAP.get(hashlib.sha256(r).hexdigest()) == captcha["text"]:
+                    correct_hash = image
+                    print(
+                        f"Found captcha solution: [bold cyan]{captcha['text']}[/] ([cyan]{correct_hash}[/])"
+                    )
+                    break
         if not correct_hash:
             eprint("Unable to solve captcha, perhaps it has new images?")
             return False
 
-        r = self.session.get("https://hdbits.org/login", params={"returnto": "/"})
-        soup = load_html(r.text)
+        r = self.session.get(
+            "https://hdbits.org/login?returnto=/", params={"returnto": "/"}
+        )
+        soup = load_html(str(r.text))
 
         totp_secret = self.config.get(self, "totp_secret")
 
         if not (el := soup.select_one("[name=csrf]")):
             eprint("Failed to extract CSRF token.")
+            print(f"Cookies location: {self.cookies_path}")
             return False
         csrf_token = el["value"]
 
@@ -143,7 +176,7 @@ class HDBitsUploader(Uploader):
                 "returnto": "/",
             },
         )
-        if "error=7" in r.url:
+        if "error=7" in str(r.url):
             print("2FA detected")
             if args.auto:
                 eprint("No TOTP secret specified in config")
@@ -160,26 +193,19 @@ class HDBitsUploader(Uploader):
                 },
             )
 
-        if "error" in r.url:
-            soup = load_html(r.text)
+        if "error" in str(r.url):
+            soup = load_html(str(r.text))
             if el := soup.find("td", {"class": "text"}):
                 error = re.sub(r"\s+", " ", el.text).strip()
             elif el := soup.select_one("embedded"):
                 error = re.sub(r"\s+", " ", el.text).strip()
             else:
                 error = "Unknown error"
-                if m := re.search(r"error=(\d+)", r.url):
+                if m := re.search(r"error=(\d+)", str(r.url)):
                     error += f" {m[1]}"
             eprint(error, True)
 
         return True
-
-    @property
-    def passkey(self) -> str | None:
-        res = self.session.get("https://hdbits.org/").text
-        if m := re.search(r"passkey=([a-f0-9]+)", res):
-            return m.group(1)
-        return None
 
     def prepare(  # type: ignore[override]
         self,
@@ -219,7 +245,7 @@ class HDBitsUploader(Uploader):
                     params={
                         "action": "showsearch",
                         "search": res["showname"],
-                        "uid": int(time.time() * 1000),
+                        "uid": str(int(time.time() * 1000)),
                     },
                 )
                 r.raise_for_status()
@@ -319,7 +345,7 @@ class HDBitsUploader(Uploader):
         thumbnail_width = max(x for x in allowed_widths if x <= thumbnail_width)
 
         thumbnails_str = ""
-        uploader = Img(self)
+        uploader = ImgUploader(self)
         for i, url in enumerate(uploader.upload(snapshots, thumbnail_width, name)):
             thumbnails_str += url
             if i % self.config.get(self, "snapshot_columns", 2) == 0:

@@ -3,32 +3,54 @@ from __future__ import annotations
 import re
 import time
 import uuid
-from abc import ABC
+from abc import ABC, abstractmethod
+from functools import wraps
 from typing import TYPE_CHECKING, Any
 
+import cloup
 from guessit import guessit
 from pymediainfo import MediaInfo
 from pyotp import TOTP
 from rich.console import Console
 from rich.markup import escape
-from rich.progress import BarColumn, MofNCompleteColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    TaskProgressColumn,
+    TextColumn,
+    TimeRemainingColumn,
+)
 from rich.prompt import Confirm, Prompt
 
-from ..utils import eprint, load_html, print, wprint
-from . import Uploader
+from pptu import __version__
+from pptu.uploaders import Uploader
+from pptu.utils import eprint, load_html, print, wprint
 
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-class AvistaZNetworkUploader(Uploader, ABC):
+def common_options(f):
+    @cloup.option(
+        "-an",
+        "--anonymous-upload",
+        is_flag=True,
+        default=False,
+        help="Upload torrent as anonymous.",
+    )
+    @cloup.pass_context
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper
+
+
+class AvistaZNetwork(Uploader, ABC):
     min_snapshots: int = 3
     random_snapshots: bool = True
-    exclude_regexs: str = r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
-
-    year_in_series_name: bool = False
-    keep_dubbed_dual_tags: bool = False
 
     COLLECTION_MAP = {
         "movie": None,
@@ -36,6 +58,19 @@ class AvistaZNetworkUploader(Uploader, ABC):
         "season": 2,
         "series": 3,
     }
+
+    @staticmethod
+    @abstractmethod
+    def cli(ctx, **kwargs):
+        pass
+
+    def __init__(self, ctx: cloup.Context, args: Any) -> None:
+        super().__init__(ctx)
+
+        self.anonymous_upload: bool = args.anonymous_upload
+
+        self.year_in_series_name: bool = False
+        self.keep_dubbed_dual_tags: bool = False
 
     @property
     def domain(self) -> str:
@@ -46,10 +81,14 @@ class AvistaZNetworkUploader(Uploader, ABC):
         return f"https://{self.domain}"
 
     @property
+    def exclude_regex(self) -> str:
+        return r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
+
+    @property
     def announce_url(self) -> str:
         return f"https://tracker.{self.domain}/{{passkey}}/announce"
 
-    def login(self, *, args: Any) -> bool:
+    def login(self, *, args: Any = None) -> bool:
         with Console().status("Checking cookie validity..."):
             r = self.session.get(
                 f"{self.base_url}/account", allow_redirects=False, timeout=60
@@ -76,7 +115,7 @@ class AvistaZNetworkUploader(Uploader, ABC):
         attempt = 1
         while True:
             r = self.session.get(f"{self.base_url}/auth/login")
-            soup = load_html(r.text)
+            soup = load_html(str(r.text))
 
             if not (el := soup.select_one("input[name=_token]")):
                 eprint("Failed to get token.")
@@ -103,7 +142,7 @@ class AvistaZNetworkUploader(Uploader, ABC):
                     ),
                 },
                 headers={
-                    "User-Agent": "pptu/0.1.0",  # TODO: Get version dynamically
+                    "User-Agent": f"pptu/{__version__}",
                 },
             ).json()
             if res["status"] != 1:
@@ -144,10 +183,9 @@ class AvistaZNetworkUploader(Uploader, ABC):
                 },
             )
 
-            if (
-                "/captcha" in r.url
-                or "Verification failed. You might be a robot!" in r.text
-            ):
+            if "/captcha" in str(
+                r.url
+            ) or "Verification failed. You might be a robot!" in str(r.text):
                 self.session.post(
                     url="https://2captcha.com/res.php",
                     params={
@@ -180,10 +218,10 @@ class AvistaZNetworkUploader(Uploader, ABC):
         self.cookies_path.parent.mkdir(parents=True, exist_ok=True)
         self.cookie_jar.save(ignore_discard=True)
 
-        if "/auth/twofa" in r.url:
+        if "/auth/twofa" in res(r.url):
             print("2FA detected")
 
-            soup = load_html(r.text)
+            soup = load_html(str(r.text))
 
             if totp_secret:
                 tfa_code = TOTP(totp_secret).now()
@@ -199,13 +237,13 @@ class AvistaZNetworkUploader(Uploader, ABC):
             token = el["value"]
 
             r = self.session.post(
-                url=r.url,
+                url=str(r.url),
                 data={
                     "_token": token,
                     "twofa_code": tfa_code,
                 },
             )
-            if "/auth/twofa" in r.url:
+            if "/auth/twofa" in str(r.url):
                 eprint("TOTP code rejected.")
                 print(r.text)
                 return False
@@ -219,12 +257,12 @@ class AvistaZNetworkUploader(Uploader, ABC):
 
     @property
     def passkey(self) -> str | None:
-        r = self.session.get(f"{self.base_url}/account")
-        soup = load_html(r.text)
-        if not (el := soup.select_one(".current_pid")):
-            eprint("Failed to get passkey.")
-            return None
-        return el.text
+        if res := self.session.get(f"{self.base_url}/account").text:
+            soup = load_html(res)
+            if not (el := soup.select_one(".current_pid")):
+                return None
+            return el.text
+        return None
 
     def prepare(  # type: ignore[override]
         self,
@@ -269,7 +307,7 @@ class AvistaZNetworkUploader(Uploader, ABC):
             episode = int(m.group(1))
 
         r = self.session.get(self.base_url)
-        soup = load_html(r.text)
+        soup = load_html(str(r.text))
 
         if not (el := soup.select_one("meta[name=_token]")):
             eprint("Failed to get token.")
@@ -340,8 +378,8 @@ class AvistaZNetworkUploader(Uploader, ABC):
             },
             timeout=60,
         )
-        self.upload_url = r.url
-        soup = load_html(r.text)
+        self.upload_url = str(r.url)
+        soup = load_html(str(r.text))
 
         if errors := soup.select(".form-error"):
             for error in errors:
@@ -417,9 +455,7 @@ class AvistaZNetworkUploader(Uploader, ABC):
             return False
         rip_type_id = el["value"]
 
-        if not (
-            el := soup.select_one("select[name=video_quality_id] option[selected]")
-        ):
+        if not (el := soup.select_one("select[name=video_quality_id] option[selected]")):
             eprint("Failed to get video quality.")
             return False
         video_quality_id = el["value"]
@@ -443,7 +479,7 @@ class AvistaZNetworkUploader(Uploader, ABC):
                 .replace("5 1 ", "5.1 ")
             ),
             "anon_upload": "1"
-            if self.config.get(self, "anonymous_upload", True)
+            if self.anonymous_upload or self.config.get(self, "anonymous_upload", True)
             else "",
             "description": note or "",
             "qqfile": "",
@@ -479,7 +515,7 @@ class AvistaZNetworkUploader(Uploader, ABC):
         auto: bool,
     ) -> bool:
         r = self.session.post(url=self.upload_url, data=self.data, timeout=60)
-        soup = load_html(r.text)
+        soup = load_html(str(r.text))
         r.raise_for_status()
 
         if not (el := soup.select_one("a[href*='/download/']")):

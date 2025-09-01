@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+import cloup
 import httpx
-import requests
+import niquests
+import orjson
 from guessit import guessit
 from imdb import Cinemagoer
 from langcodes import Language
@@ -15,250 +17,82 @@ from pyotp import TOTP
 from rich.prompt import Prompt
 from rich.status import Status
 
-from ..utils import Img, eprint, find, first, first_or_none, generate_thumbnails, load_html, print, wprint
-from . import Uploader
+from pptu.uploaders import Uploader
+from pptu.utils import (
+    ImgUploader,
+    eprint,
+    find,
+    first,
+    first_or_none,
+    generate_thumbnails,
+    load_html,
+    print,
+    wprint,
+)
 
 
 ia = Cinemagoer()
 
 
-class nCoreUploader(Uploader):
-    name: str = "nCore"
-    abbrev: str = "nC"
-    announce_url: list[str] = [
-        "https://t.ncore.sh:2810/{passkey}/announce",
-        "https://t.ncore.pro:2810/{passkey}/announce",
-    ]
+class nCore(Uploader):
+    source = "ncore.pro"
     min_snapshots: int = 3
     snapshots_plus: int = 3
-    exclude_regexs: str = r".*\.(ffindex|jpg|png|torrent|txt)$"
-    source: str | None = "ncore.pro"
+
+    @staticmethod
+    @cloup.command(
+        name="nCore",
+        aliases=["nC"],
+        short_help="https://ncore.pro/",
+        help=__doc__,
+    )
+    @cloup.option(
+        "-an",
+        "--anonymous-upload",
+        is_flag=True,
+        default=False,
+        help="Upload torrent as anonymous.",
+    )
+    @cloup.option(
+        "-ri",
+        "--request-id",
+        type=str,
+        default=None,
+        help="Request ID to fulfill a request.",
+    )
+    @cloup.pass_context
+    def cli(ctx: cloup.Context, **kwargs: Any) -> nCore:
+        return nCore(ctx, SimpleNamespace(**kwargs))
+
+    def __init__(self, ctx: cloup.Context, args: Any) -> None:
+        super().__init__(ctx)
+
+        self.anonymous_upload: bool = args.anonymous_upload
+        self.request_id: str = args.request_id
+
+        self.nfo_file: Path | None = None
+
+    @property
+    def announce_url(self) -> list[str]:
+        return [
+            "https://t.ncore.sh:2810/{passkey}/announce",
+            "https://t.ncore.pro:2810/{passkey}/announce",
+        ]
+
+    @property
+    def exclude_regex(self) -> str:
+        return r".*\.(ffindex|jpg|png|torrent|txt)$"
 
     @property
     def passkey(self) -> str | None:
-        res = self.session.get("https://ncore.pro/torrents.php").text
-        if m := find(
-            r'<link rel="alternate" href="/rss.php\?key=([a-f0-9]+)" title', res
-        ):
-            return m
+        if res := self.session.get("https://ncore.pro/torrents.php").text:
+            if m := find(
+                r'<link rel="alternate" href="/rss.php\?key=([a-f0-9]+)" title', res
+            ):
+                return m
         return None
 
-    @property
-    def get_unique(self) -> str:
-        """
-        This method sends a GET request to https://ncore.pro/ and extracts a unique ID from the response.
-        The ID is returned as a string.
-        """
-        data = self.session.get(url="https://ncore.pro/").text
-        id = find(r'<a href="exit.php\?q=(.*)" id="menu_11" class="menu_link">', data)
-
-        return id if id else ""
-
-    def link_shortener(self, url: str | None) -> str | None:
-        url = url.replace("www.", "").replace("http://", "https://")
-
-        if not url.startswith("https://"):
-            url = f"https://{url}"
-
-        if "imdb.com" in url:
-            return re.sub(r"(.+tt\d+)(.+)?", r"\1", url)
-
-        if "port.hu" in url:
-            return re.sub(r"(film/tv/)(.+?)(/)", r"\1x\3", url)
-
-        if "mafab.hu" in url:
-            return re.sub(r"(/movies/)(.+?)(-[\d]+)(.+)?", r"\1x\3", url)
-
-        return url
-
-    def ajax_parser(self, value: str) -> str:
-        """Parses the AJAX data for a given value."""
-        m = find(rf'id="{value}" value="(.*)">', self.imdb_ajax_data)
-
-        return m if m else ""
-
-    def extract_nfo_urls(self, nfo: str) -> list[str]:
-        """
-        Extracts URLs from an NFO file and returns a list of URLs that belong to specific databases.
-        """
-        urls: list[str] = re.findall(r"https?://[^ ░▒▓█▄▌▐─│\n]+", nfo)
-        self.databse_urls = [
-            x
-            for x in urls
-            if any(
-                database in x
-                for database in {
-                    "imdb.com",
-                    "tvmaze.com",
-                    "thetvdb.com",
-                    "port.hu",
-                    "rottentomatoes.com",
-                    "myanimelist.net",
-                    "netflix.com",
-                    "mafab.hu",
-                }
-            )
-        ]
-
-        return self.databse_urls
-
-    def mafab_scraper(
-        self, imdb: str, gi: dict, urls: list, auto: bool
-    ) -> dict[str, str | list[str]]:
-        """
-        If NFO contains a Mafab link, it returns that. Otherwise, it tries to find the movie on Mafab.hu and returns the link.
-        """
-        urls.append("")
-        mafab_link = first_or_none(x for x in urls if "mafab.hu" in x) or ""
-        from_sec: bool = True if mafab_link else False
-        data = dict()
-
-        if not mafab_link:
-            try:
-                mafab_site: dict = self.client.get(
-                    url=f"https://www.mafab.hu/js/autocomplete.php?v=20&term={gi['title'].replace(' ', '+')}",
-                    headers={
-                        "X-Requested-With": "XMLHttpRequest",
-                    },
-                ).json()
-                for x in mafab_site:
-                    if x["cat"] == "movie":
-                        if (site := self.client.get(x["id"]).text) and str(
-                            imdb
-                        ) in site:
-                            mafab_link = x["id"]
-                            data = self.mafab_data_scraper(site, mafab_link) or {}
-                            break
-            except Exception as e:
-                wprint(f"error: {e}.")
-
-        if not mafab_link:
-            wprint("Mafab.hu scraping failed.")
-            if not auto:
-                mafab_link = Prompt.ask("Mafab.hu link")
-            from_sec = True
-        else:
-            print(f"Mafab.hu link: {mafab_link}", True)
-        if mafab_link and from_sec:
-            data = (
-                self.mafab_data_scraper(self.client.get(mafab_link).text, mafab_link)
-                or {}
-            )
-
-        return {"link": mafab_link, **data}
-
-    def port_scraper(
-        self, imdb: str, gi: dict, urls: list, auto: bool
-    ) -> dict[str, str | list[str]]:
-        """
-        If NFO contains a Mafab link, it returns that. Otherwise, it tries to find the movie on Port.hu and returns the link.
-        """
-        urls.append("")
-        port_link = (
-            first_or_none(x for x in urls if "port.hu" in x and "/-/" not in x) or ""
-        )
-        from_sec: bool = True if port_link else False
-        data = dict()
-
-        if not port_link:
-            try:
-                port_site: dict = requests.get(
-                    url=f"https://port.hu/search/suggest-list?q={gi['title'].replace(' ', '+')}",
-                ).json()
-                for x in port_site:
-                    if (
-                        site := requests.get("https://port.hu" + x["url"]).text
-                    ) and str(imdb) in site:
-                        port_link = "https://port.hu" + x["url"]
-                        data = self.port_data_scraper(site, port_link) or {}
-                        temp = x.get("subtitle", "").split(",")
-                        data["genre"] = (temp[0] or "").split(" ")
-                        data["year"] = temp[-1]
-                        break
-            except Exception as e:
-                wprint(f"{e}.")
-
-        if not port_link:
-            wprint("PORT.hu scraping failed.")
-            if not auto:
-                port_link = Prompt.ask("PORT.hu link")
-            from_sec = True
-        else:
-            print(f"PORT.hu link: {port_link}", True)
-        if port_link and from_sec:
-            data = self.port_data_scraper(requests.get(port_link).text, port_link) or {}
-
-        return {"link": port_link, **data}
-
-    def mafab_data_scraper(self, site: str, link: str) -> dict[str, str]:
-        """
-        Extracts the description of a movie from Mafab.hu.
-        """
-        return_data = dict()
-
-        soup = load_html(site)
-        name = soup.find("meta", itemprop="name")
-        if name and (
-            name_ := find(r'<meta content="(.*)" itemprop="name"/>', str(name))
-        ):
-            return_data["name"] = name_.strip()
-        info = soup.find("div", class_="biobox_full_0") or soup.find(
-            "div", class_="bio-content biotab_0"
-        )
-        if info and (info_ := info.find("p") or info.find("span")):
-            return_data["info"] = info_.text.strip()
-        if link and not return_data.get("description"):
-            id: str = link.split("-")[-1].rstrip(".html")
-            res = self.client.post(
-                url="https://www.mafab.hu/includes/jquery/movies_ajax.php",
-                data={
-                    "request": "official_bio",
-                    "movie_id": id,
-                },
-                headers={
-                    "x-requested-with": "XMLHttpRequest",
-                },
-            )
-            soup2 = load_html(res.text)
-            if soup2 and (info_ := soup2.find("p")):
-                return_data["description"] = info_.text.strip()
-        genre = soup.find("meta", itemprop="description")
-        if genre and (
-            genre_ := find(r'<meta content="(.*)" itemprop="description"/>', str(genre))
-        ):
-            return_data["genre"] = [
-                x.strip() for x in first(genre_.split(",")).split("|") or [""]
-            ]
-        year = soup.find("meta", itemprop="datePublished")
-        if year and (
-            year_ := find(r'<meta content="(.*)" itemprop="datePublished"/>', str(year))
-        ):
-            return_data["year"] = year_[0:4]
-
-        return return_data
-
-    def port_data_scraper(self, site: str) -> dict[str, str]:
-        """
-        Extracts the description of a movie from Port.hu.
-        """
-        return_data = dict()
-        soup = load_html(site)
-        script = soup.find("script", type="application/ld+json")
-        if script and (info_ := json.loads(script.string)):
-            return_data["name"] = info_.get("name", "")
-            return_data["info"] = (
-                info_.get("description", "").replace("\r\n", " ").strip()
-            )
-            return_data["genre"] = info_.get("genre", "").split()
-        category = soup.find("div", class_="summary")
-        if category and (category_ := category.find("span")):
-            temp = category_.text.split(",")
-            return_data["year"] = temp[-1].strip()
-            return_data["genre"] = (temp[0] or "").split(" ")
-
-        return return_data
-
-    def login(self, *, args: Any) -> bool:
+    def login(self, *, args: Any = None) -> bool:
         if not args.disable_snapshots and self.config.get(self, "snapshots"):
             # set snapshots number from config
             self.min_snapshots += self.config.get(
@@ -266,7 +100,7 @@ class nCoreUploader(Uploader):
             ) * self.config.get(self, "snapshot_rows", 3)
 
         r = self.session.get("https://ncore.pro/")
-        if "login.php" not in r.url:
+        if "login.php" not in str(r.url):
             return True
 
         wprint("Cookies missing or expired, logging in...")
@@ -278,17 +112,13 @@ class nCoreUploader(Uploader):
         if not (password := self.config.get(self, "password")):
             eprint("No password specified in config, cannot log in.")
             return False
-        tfa_code = None
-
-        if totp_secret := self.config.get(self, "totp_secret"):
-            tfa_code = TOTP(totp_secret).now()
-        else:
-            if args.auto:
-                eprint("No TOTP secret specified in config")
-                return False
-            tfa_code = Prompt.ask("Enter 2FA code")
 
         print("Logging in")
+
+        tfa_code = ""
+        if totp_secret := self.config.get(self, "totp_secret"):
+            tfa_code = TOTP(totp_secret).now()
+
         r = self.session.post(
             url="https://ncore.pro/login.php?2fa",
             data={
@@ -302,8 +132,26 @@ class nCoreUploader(Uploader):
         )
         r.raise_for_status()
 
+        if "login.php" in str(r.url):
+            if args.auto:
+                eprint("No TOTP secret specified in config")
+                return False
+            tfa_code = Prompt.ask("Enter 2FA code")
+            r = self.session.post(
+                url="https://ncore.pro/login.php?2fa",
+                data={
+                    "set_lang": "hu",
+                    "submitted": "1",
+                    "nev": username,
+                    "pass": password,
+                    "2factor": tfa_code,
+                    "ne_leptessen_ki": "1",
+                },
+            )
+            r.raise_for_status()
+
         r = self.session.get("https://ncore.pro/")
-        if "login.php" in r.url:
+        if "login.php" in str(r.url):
             eprint("Failed to login.", True)
 
         return True
@@ -337,10 +185,7 @@ class nCoreUploader(Uploader):
             follow_redirects=True,
         )
         typ = ""
-        if (
-            re.search(r"\.S\d+(E\d+|\.Special)+\.", str(path))
-            or gi["type"] == "episode"
-        ):
+        if re.search(r"\.S\d+(E\d+|\.Special)+\.", str(path)) or gi["type"] == "episode":
             typ = "episode"
             type_ = "ser"
         elif re.search(r"\.S\d+\.", str(path)) or gi["type"] == "season":
@@ -353,10 +198,9 @@ class nCoreUploader(Uploader):
         print(f"Detected: [bold cyan]{typ}[/]")
 
         if path.is_dir():
-            self.nfo_file = sorted([*path.glob("*.nfo")])
+            self.nfo_file = first_or_none(sorted([*path.glob("*.nfo")]))
             if self.nfo_file:
-                self.nfo_file = self.nfo_file[0]
-                urls = self.extract_nfo_urls(
+                urls = self._extract_nfo_urls(
                     Path(self.nfo_file).read_text(encoding="CP437", errors="ignore")
                 )
                 imdb_id: str | None = None
@@ -403,7 +247,7 @@ class nCoreUploader(Uploader):
         with Status("[bold magenta]Parsing for info scraping...") as _:
             m_info_temp: str = MediaInfo.parse(file, output="JSON", full=True)
             if m_info_temp:
-                mediainfo_: dict = json.loads(m_info_temp)["media"]["track"]
+                mediainfo_: dict = orjson.loads(m_info_temp)["media"]["track"]
             else:
                 eprint("MediaInfo parsing failed.", exit_code=1)
 
@@ -433,15 +277,13 @@ class nCoreUploader(Uploader):
 
         thumbnails_str: str = ""
 
-        if snapshots[0:-3]:
-            uploader = Img(self)
+        if snapshots and snapshots[0:-3]:
+            uploader = ImgUploader(self)
             thumbnails_str += "[spoiler=Screenshots][center]"
             snapshot_urls = []
             for snap in uploader.upload(snapshots[0:-3]):
                 snapshot_urls.append(
-                    f"https://i.kek.sh/{snap['filename']}"
-                    if snap.get("filename")
-                    else ""
+                    f"https://i.kek.sh/{snap['filename']}" if snap.get("filename") else ""
                 )
 
             thumbnail_row_width = min(
@@ -477,14 +319,14 @@ class nCoreUploader(Uploader):
             description = f"[quote]{note}[/quote]\n\n{description}"
         if config := self.config.get(self, "description"):
             if config == "mafab" or config is True:
-                mafab: dict = self.mafab_scraper(imdb_id, gi, urls, auto)
+                mafab: dict = self._mafab_scraper(imdb_id, gi, urls, auto)
                 if (link := mafab.get("link")) and (info := mafab.get("info")):
                     description = f"[url={link}]Mafab.hu[/url]: {info}\n\n{description}"
                     database = link
                 hun_name = mafab.get("name", "")
                 year = mafab.get("year", "")
             elif config == "port" or config is True and "mafab" not in description:
-                port: dict = self.port_scraper(imdb_id, gi, urls, auto)
+                port: dict = self._port_scraper(imdb_id, gi, urls, auto)
                 if (link := port.get("link")) and (info := port.get("info")):
                     description = f"[url={link}]PORT.hu[/url]: {info}\n\n{description}"
                     database = link
@@ -496,37 +338,38 @@ class nCoreUploader(Uploader):
         if len(release_name) > 84:
             description = f"[center][highlight][size=10pt]{release_name}[/size][/highlight][/center]\n\n\n{description}"
 
-        en_title = self.ajax_parser("movie_angol_cim")
-        hun_title = self.ajax_parser("movie_magyar_cim") or hun_name
+        en_title = self._ajax_parser("movie_angol_cim")
+        hun_title = self._ajax_parser("movie_magyar_cim") or hun_name
 
         self.data = {
-            "getUnique": self.get_unique,
+            "getUnique": self._get_unique,
             "eredeti": "igen",
             "infobar_site": "imdb",
             "tipus": type_,
             "torrent_nev": release_name,
             "szoveg": description,
             "imdb_id": imdb_id,
-            "film_adatbazis": self.link_shortener(
+            "film_adatbazis": self._link_shortener(
                 next(x for x in self.databse_urls + [""] if "imdb.com" not in x)
                 or database
             ),
-            "infobar_picture": self.ajax_parser("movie_picture"),
-            "infobar_rank": self.ajax_parser("movie_rank"),
-            "infobar_genres": self.ajax_parser("movie_genres"),
-            "megjelent": self.ajax_parser("movie_megjelenes_eve") or year,
-            "orszag": self.ajax_parser("movie_orszag"),
-            "hossz": self.ajax_parser("movie_hossz"),
+            "infobar_picture": self._ajax_parser("movie_picture"),
+            "infobar_rank": self._ajax_parser("movie_rank"),
+            "infobar_genres": self._ajax_parser("movie_genres"),
+            "megjelent": self._ajax_parser("movie_megjelenes_eve") or year,
+            "orszag": self._ajax_parser("movie_orszag"),
+            "hossz": self._ajax_parser("movie_hossz"),
             "film_magyar_cim": hun_title if en_title != hun_title else "",
             "film_angol_cim": en_title,
             "film_idegen_cim": hun_title if en_title and en_title != hun_title else "",
-            "rendezo": self.ajax_parser("movie_rendezo"),
-            "szereplok": self.ajax_parser("movie_szereplok"),
+            "rendezo": self._ajax_parser("movie_rendezo"),
+            "szereplok": self._ajax_parser("movie_szereplok"),
             "szezon": "",
             "epizod_szamok": "",
             "keresre": "nem",
-            # "keres_kodja": "$request_id", # TODO: implement
-            "anonymous": self.config.get(self, "anonymous_upload", False),
+            **({"keres_kodja": self.request_id} if self.request_id else {}),
+            "anonymous": self.anonymous_upload
+            or self.config.get(self, "anonymous_upload", False),
             "elrejt": "nem",
             "mindent_tud1": "szabalyzat",
             "mindent_tud3": "seedeles",
@@ -557,9 +400,21 @@ class nCoreUploader(Uploader):
                     self.nfo_file.open("rb"),
                     "application/octet-stream",
                 ),
-                "kep1": (str(snapshots[-3]), snapshots[-3].open("rb"), "image/png"),
-                "kep2": (str(snapshots[-2]), snapshots[-2].open("rb"), "image/png"),
-                "kep3": (str(snapshots[-1]), snapshots[-1].open("rb"), "image/png"),
+                "kep1": (
+                    str(snapshots[-3]),
+                    snapshots[-3].open("rb"),
+                    f"image/{snapshots[-3].suffix.lstrip('.')}",
+                ),
+                "kep2": (
+                    str(snapshots[-2]),
+                    snapshots[-2].open("rb"),
+                    f"image/{snapshots[-2].suffix.lstrip('.')}",
+                ),
+                "kep3": (
+                    str(snapshots[-1]),
+                    snapshots[-1].open("rb"),
+                    f"image/{snapshots[-1].suffix.lstrip('.')}",
+                ),
             },
             data=self.data,
         )
@@ -576,3 +431,214 @@ class nCoreUploader(Uploader):
         )
 
         return True
+
+    @property
+    def _get_unique(self) -> str:
+        """
+        This method sends a GET request to https://ncore.pro/ and extracts a unique ID from the response.
+        The ID is returned as a string.
+        """
+        data = self.session.get(url="https://ncore.pro/").text
+        id = find(r'<a href="exit.php\?q=(.*)" id="menu_11" class="menu_link">', data)
+
+        return id if id else ""
+
+    def _link_shortener(self, url: str | None) -> str | None:
+        url = url.replace("www.", "").replace("http://", "https://")
+
+        if not url.startswith("https://"):
+            url = f"https://{url}"
+
+        if "imdb.com" in url:
+            return re.sub(r"(.+tt\d+)(.+)?", r"\1", url)
+
+        if "port.hu" in url:
+            return re.sub(r"(film/tv/)(.+?)(/)", r"\1x\3", url)
+
+        if "mafab.hu" in url:
+            return re.sub(r"(/movies/)(.+?)(-[\d]+)(.+)?", r"\1x\3", url)
+
+        return url
+
+    def _ajax_parser(self, value: str) -> str:
+        """Parses the AJAX data for a given value."""
+        m = find(rf'id="{value}" value="(.*)">', self.imdb_ajax_data)
+
+        return m if m else ""
+
+    def _extract_nfo_urls(self, nfo: str) -> list[str]:
+        """
+        Extracts URLs from an NFO file and returns a list of URLs that belong to specific databases.
+        """
+        urls: list[str] = re.findall(r"https?://[^ ░▒▓█▄▌▐─│\n]+", nfo)
+        self.databse_urls = [
+            x
+            for x in urls
+            if any(
+                database in x
+                for database in {
+                    "imdb.com",
+                    "tvmaze.com",
+                    "thetvdb.com",
+                    "port.hu",
+                    "rottentomatoes.com",
+                    "myanimelist.net",
+                    "netflix.com",
+                    "mafab.hu",
+                }
+            )
+        ]
+
+        return self.databse_urls
+
+    def _mafab_scraper(
+        self, imdb: str, gi: dict, urls: list, auto: bool
+    ) -> dict[str, str | list[str]]:
+        """
+        If NFO contains a Mafab link, it returns that. Otherwise, it tries to find the movie on Mafab.hu and returns the link.
+        """
+        urls.append("")
+        mafab_link = first_or_none(x for x in urls if "mafab.hu" in x) or ""
+        from_sec: bool = True if mafab_link else False
+        data = dict()
+
+        if not mafab_link:
+            try:
+                mafab_site: dict = self.client.get(
+                    url=f"https://www.mafab.hu/js/autocomplete.php?v=20&term={gi['title'].replace(' ', '+')}",
+                    headers={
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                ).json()
+                for x in mafab_site:
+                    if x["cat"] == "movie":
+                        if (site := self.client.get(x["id"]).text) and str(imdb) in site:
+                            mafab_link = x["id"]
+                            data = self._mafab_data_scraper(site, mafab_link) or {}
+                            break
+            except Exception as e:
+                wprint(f"error: {e}.")
+
+        if not mafab_link:
+            wprint("Mafab.hu scraping failed.")
+            if not auto:
+                mafab_link = Prompt.ask("Mafab.hu link")
+            from_sec = True
+        else:
+            print(f"Mafab.hu link: {mafab_link}", True)
+        if mafab_link and from_sec:
+            data = (
+                self._mafab_data_scraper(self.client.get(mafab_link).text, mafab_link)
+                or {}
+            )
+
+        return {"link": mafab_link, **data}
+
+    def _port_scraper(
+        self, imdb: str, gi: dict, urls: list, auto: bool
+    ) -> dict[str, str | list[str]]:
+        """
+        If NFO contains a Mafab link, it returns that. Otherwise, it tries to find the movie on Port.hu and returns the link.
+        """
+        urls.append("")
+        port_link = (
+            first_or_none(x for x in urls if "port.hu" in x and "/-/" not in x) or ""
+        )
+        from_sec: bool = True if port_link else False
+        data = dict()
+
+        if not port_link:
+            try:
+                port_site: dict = niquests.get(
+                    url=f"https://port.hu/search/suggest-list?q={gi['title'].replace(' ', '+')}",
+                ).json()
+                for x in port_site:
+                    if (site := niquests.get("https://port.hu" + x["url"]).text) and str(
+                        imdb
+                    ) in site:
+                        port_link = "https://port.hu" + x["url"]
+                        data = self._port_data_scraper(site, port_link) or {}
+                        temp = x.get("subtitle", "").split(",")
+                        data["genre"] = (temp[0] or "").split(" ")
+                        data["year"] = temp[-1]
+                        break
+            except Exception as e:
+                wprint(f"{e}.")
+
+        if not port_link:
+            wprint("PORT.hu scraping failed.")
+            if not auto:
+                port_link = Prompt.ask("PORT.hu link")
+            from_sec = True
+        else:
+            print(f"PORT.hu link: {port_link}", True)
+        if port_link and from_sec:
+            data = self._port_data_scraper(niquests.get(port_link).text, port_link) or {}
+
+        return {"link": port_link, **data}
+
+    def _mafab_data_scraper(self, site: str, link: str) -> dict[str, str]:
+        """
+        Extracts the description of a movie from Mafab.hu.
+        """
+        return_data = dict()
+
+        soup = load_html(site)
+        name = soup.find("meta", itemprop="name")
+        if name and (name_ := find(r'<meta content="(.*)" itemprop="name"/>', str(name))):
+            return_data["name"] = name_.strip()
+        info = soup.find("div", class_="biobox_full_0") or soup.find(
+            "div", class_="bio-content biotab_0"
+        )
+        if info and (info_ := info.find("p") or info.find("span")):
+            return_data["info"] = info_.text.strip()
+        if link and not return_data.get("description"):
+            id: str = link.split("-")[-1].rstrip(".html")
+            res = self.client.post(
+                url="https://www.mafab.hu/includes/jquery/movies_ajax.php",
+                data={
+                    "request": "official_bio",
+                    "movie_id": id,
+                },
+                headers={
+                    "x-requested-with": "XMLHttpRequest",
+                },
+            )
+            soup2 = load_html(res.text)
+            if soup2 and (info_ := soup2.find("p")):
+                return_data["description"] = info_.text.strip()
+        genre = soup.find("meta", itemprop="description")
+        if genre and (
+            genre_ := find(r'<meta content="(.*)" itemprop="description"/>', str(genre))
+        ):
+            return_data["genre"] = [
+                x.strip() for x in first(genre_.split(",")).split("|") or [""]
+            ]
+        year = soup.find("meta", itemprop="datePublished")
+        if year and (
+            year_ := find(r'<meta content="(.*)" itemprop="datePublished"/>', str(year))
+        ):
+            return_data["year"] = year_[0:4]
+
+        return return_data
+
+    def _port_data_scraper(self, site: str) -> dict[str, str]:
+        """
+        Extracts the description of a movie from Port.hu.
+        """
+        return_data = dict()
+        soup = load_html(site)
+        script = soup.find("script", type="application/ld+json")
+        if script and (info_ := orjson.loads(script.string)):
+            return_data["name"] = info_.get("name", "")
+            return_data["info"] = (
+                info_.get("description", "").replace("\r\n", " ").strip()
+            )
+            return_data["genre"] = info_.get("genre", "").split()
+        category = soup.find("div", class_="summary")
+        if category and (category_ := category.find("span")):
+            temp = category_.text.split(",")
+            return_data["year"] = temp[-1].strip()
+            return_data["genre"] = (temp[0] or "").split(" ")
+
+        return return_data

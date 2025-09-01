@@ -5,11 +5,12 @@ from hashlib import sha1
 from http.cookiejar import MozillaCookieJar
 from typing import TYPE_CHECKING, Any
 
-import requests
-from platformdirs import PlatformDirs
-from requests.adapters import HTTPAdapter, Retry
+import cloup
+import niquests
+from niquests.adapters import HTTPAdapter
+from urllib3_future.util.retry import Retry
 
-from ..utils import Config, eprint
+from pptu.utils import Config, eprint
 
 
 if TYPE_CHECKING:
@@ -17,37 +18,33 @@ if TYPE_CHECKING:
 
 
 class Uploader(ABC):
-    name: str  # Name of the tracker
-    abbrev: str  # Abbreviation of the tracker
-
     source: str | None = None  # Source tag to use in created torrent files
-
     all_files: bool = False  # Whether to generate MediaInfo and snapshots for all files
     min_snapshots: int = 0
     snapshots_plus: int = 0  # Number of extra snapshots to generate
     random_snapshots: bool = False
     mediainfo: bool = True
 
-    def __init__(self) -> None:
-        self.dirs = PlatformDirs(appname="pptu", appauthor=False)
+    def __init__(self, ctx: cloup.Context) -> None:
+        self.dirs = ctx.obj.dirs
+        self.config: Config = ctx.obj.config
 
-        self.config = Config(self.dirs.user_config_path / "config.toml")
         self.cookies_path = (
             self.dirs.user_data_path
             / "cookies"
-            / f"""{self.name.lower()}_{sha1(f"{self.config.get(self, 'username')}".encode()).hexdigest()}.txt"""
+            / f"""{self.cli.name.lower()}_{sha1(f"{self.config.get(self, 'username')}".encode()).hexdigest()}.txt"""
         )
         if not self.cookies_path.exists():
             self.cookies_path = (
                 self.dirs.user_data_path
                 / "cookies"
-                / f"""{self.name.lower()}_{sha1(f"{self.config.get(self, 'username')}".encode()).hexdigest()}.txt"""
+                / f"""{self.cli.aliases[0].lower()}_{sha1(f"{self.config.get(self, 'username')}".encode()).hexdigest()}.txt"""
             )
         self.cookie_jar = MozillaCookieJar(self.cookies_path)
         if self.cookies_path.exists():
             self.cookie_jar.load(ignore_expires=True, ignore_discard=True)
 
-        self.session = requests.Session()
+        self.session = niquests.Session(disable_http3=True)
         for scheme in ("http://", "https://"):
             self.session.mount(
                 scheme,
@@ -69,28 +66,23 @@ class Uploader(ABC):
                     )
                 ),
             )
+
         for cookie in self.cookie_jar:
             self.session.cookies.set_cookie(cookie)
+
         self.session.proxies.update({"all": self.config.get(self, "proxy")})
 
         self.data: dict[str, Any] = {}
 
     @property
     @abstractmethod
-    def announce_url(self) -> str:
+    def announce_url(self) -> list[str] | str:
         """Announce URL of the tracker. May include {passkey} variable."""
 
     @property
     @abstractmethod
-    def exclude_regexs(self) -> str:
+    def exclude_regex(self) -> str:
         """Torrent excluded file of the tracker."""
-
-    def login(self, *, args: Any) -> bool:
-        if not self.session.cookies:
-            eprint(f"No cookies found for {self.abbrev}, cannot log in.")
-            return False
-
-        return True
 
     @property
     def passkey(self) -> str | None:
@@ -100,12 +92,19 @@ class Uploader(ABC):
         """
         return None
 
+    def login(self, *, args: Any = None) -> bool:
+        if not self.session.cookies:
+            eprint(f"No cookies found for {self.cli.aliases[0]}, cannot log in.")
+            return False
+
+        return True
+
     @abstractmethod
     def prepare(
         self,
         path: Path,
         torrent_path: Path,
-        mediainfo: str | list[str],
+        mediainfo: str | list[str] | None,
         snapshots: list[Path],
         *,
         note: str | None,
@@ -121,7 +120,7 @@ class Uploader(ABC):
         self,
         path: Path,
         torrent_path: Path,
-        mediainfo: str | list[str],
+        mediainfo: str | list[str] | None,
         snapshots: list[Path],
         *,
         note: str | None,

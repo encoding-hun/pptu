@@ -1,29 +1,34 @@
 from __future__ import annotations
 
-import json
 import re
-import subprocess
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
+import cloup
+import orjson
 from guessit import guessit
 from langcodes import Language
+from pymediainfo import MediaInfo
 from pyotp import TOTP
 from rich.prompt import Prompt
 
-from ..utils import Img, eprint, find, generate_thumbnails, load_html, print, wprint
-from . import Uploader
+from pptu.uploaders import Uploader
+from pptu.utils import (
+    ImgUploader,
+    eprint,
+    find,
+    generate_thumbnails,
+    load_html,
+    print,
+    wprint,
+)
 
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-class BroadcasTheNetUploader(Uploader):
-    name: str = "BroadcasTheNet"
-    abbrev: str = "BTN"
-    announce_url: str = "https://landof.tv/{passkey}/announce"
-    exclude_regexs: str = r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
-
+class BroadcasTheNet(Uploader):
     COUNTRY_MAP: dict[str, int] = {
         "AD": 65,
         "AF": 51,
@@ -130,23 +135,44 @@ class BroadcasTheNetUploader(Uploader):
         "ZA": 26,
     }
 
+    @staticmethod
+    @cloup.command(
+        name="BroadcasTheNet",
+        aliases=["BTN"],
+        short_help="https://broadcasthe.net/",
+        help=__doc__,
+    )
+    @cloup.pass_context
+    def cli(ctx: cloup.Context, **kwargs: Any) -> BroadcasTheNet:
+        return BroadcasTheNet(ctx, SimpleNamespace(**kwargs))
+
+    def __init__(self, ctx: cloup.Context, args: Any) -> None:
+        super().__init__(ctx)
+
+    @property
+    def announce_url(self) -> str:
+        return "https://landof.tv/{passkey}/announce"
+
+    @property
+    def exclude_regex(self) -> str:
+        return r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
+
     @property
     def passkey(self) -> str | None:
-        res = self.session.get("https://backup.landof.tv/upload.php").text
-        soup = load_html(res)
-        if not (el := soup.select_one("input[value$='/announce']")):
-            eprint("Failed to get announce URL.")
-            return None
+        if res := self.session.get("https://backup.landof.tv/upload.php").text:
+            soup = load_html(res)
+            if not (el := soup.select_one("input[value$='/announce']")):
+                return None
+            return el.attrs["value"].split("/")[-2]
+        return None
 
-        return el.attrs["value"].split("/")[-2]
-
-    def login(self, *, auto: Any) -> bool:
+    def login(self, *, args: Any = None) -> bool:
         # Allow cookies from either broadcasthe.net or backup.landof.tv
         for cookie in self.session.cookies:
             cookie.domain = cookie.domain.replace("broadcasthe.net", "backup.landof.tv")
 
         r = self.session.get("https://backup.landof.tv/user.php")
-        if "login.php" not in r.url:
+        if "login.php" not in str(r.url):
             return True
 
         wprint("Cookies missing or expired, logging in...")
@@ -160,39 +186,45 @@ class BroadcasTheNetUploader(Uploader):
             return False
 
         print("Logging in")
+
+        tfa_code = ""
+        if totp_secret := self.config.get(self, "totp_secret"):
+            tfa_code = TOTP(totp_secret).now()
         r = self.session.post(
             url="https://backup.landof.tv/login.php",
             data={
                 "username": username,
                 "password": password,
                 "keeplogged": "1",
+                "code": tfa_code,
                 "login": "Log In!",
             },
         )
-        if "Your IP is banned indefinitely." in r.text:
+
+        if "Your IP is banned indefinitely." in str(r.text):
             eprint("Your IP is banned indefinitely.", fatal=True)
 
         r.raise_for_status()
 
-        if "login.php" in r.url:
-            if totp_secret := self.config.get(self, "totp_secret"):
-                tfa_code = TOTP(totp_secret).now()
-            else:
-                if auto:
-                    eprint("No TOTP secret specified in config")
-                    return False
-                tfa_code = Prompt.ask("Enter 2FA code")
+        if "login.php" in str(r.url):
+            if args.auto:
+                eprint("No TOTP secret specified in config")
+                return False
+            tfa_code = Prompt.ask("Enter 2FA code")
 
             r = self.session.post(
                 url="https://backup.landof.tv/login.php",
                 data={
+                    "username": username,
+                    "password": password,
+                    "keeplogged": "1",
                     "code": tfa_code,
-                    "act": "authenticate",
+                    "login": "Log In!",
                 },
             )
             r.raise_for_status()
 
-        return "login.php" not in r.url
+        return "login.php" not in str(r.url)
 
     def prepare(  # type: ignore[override]
         self,
@@ -244,7 +276,7 @@ class BroadcasTheNetUploader(Uploader):
             },
             timeout=60,
         )
-        soup = load_html(r.text)
+        soup = load_html(str(r.text))
         if r.status_code == 302:
             eprint("Cookies expired.")
             return False
@@ -257,7 +289,9 @@ class BroadcasTheNetUploader(Uploader):
 
         if gi.get("episode_details") == "Special":
             artist = gi["title"]
-            title = f"Season {gi['season']} - {re.sub(r'^Special ', '', gi['episode_title'])}"
+            title = (
+                f"Season {gi['season']} - {re.sub(r'^Special ', '', gi['episode_title'])}"
+            )
         else:
             artist = title = "AutoFill Fail"
             if el := soup.select_one("[name=artist]"):
@@ -284,29 +318,22 @@ class BroadcasTheNetUploader(Uploader):
             file = sorted([*path.glob("*.mkv"), *path.glob("*.mp4")])[0]
         else:
             file = path
-        if file.suffix == ".mkv":
-            info = json.loads(
-                subprocess.run(
-                    ["mkvmerge", "-J", file], capture_output=True, encoding="utf-8"
-                ).stdout
-            )
-            audio = next(x for x in info["tracks"] if x["type"] == "audio")
-            lang = audio["properties"].get("language_ietf") or audio["properties"].get(
-                "language"
-            )
-            if not lang:
-                eprint("Unable to determine audio language.")
-                return False
-            lang = Language.get(lang)
-            if not lang.language:
-                eprint("Primary audio track has no language set.")
-            lang = lang.fill_likely_values()
-        elif file.suffix == ".mp4":
-            eprint("MP4 is not yet supported.")  # TODO
+
+        info = (
+            orjson.loads(MediaInfo.parse(file, output="JSON", full=False))
+            .get("media", {})
+            .get("track", [])
+        )
+
+        audio = next(x for x in info if x["@type"] == "Audio")
+        lang = audio.get("Language")
+        if not lang:
+            eprint("Unable to determine audio language.")
             return False
-        else:
-            eprint("File must be MKV or MP4.")
-            return False
+        lang = Language.get(lang)
+        if not lang.language:
+            eprint("Primary audio track has no language set.")
+        lang = lang.fill_likely_values()
 
         if lang.territory == "419":
             if auto:
@@ -326,8 +353,8 @@ class BroadcasTheNetUploader(Uploader):
             ).replace("..", ".")
 
         thumbnails_str = ""
-        if self.config.get(self, "img_uploader"):
-            uploader = Img(self)
+        if self.config.get(self, "img_uploaders"):
+            uploader = ImgUploader(self)
             snapshot_urls = []
             for snapshot in uploader.upload(snapshots):
                 snapshot_urls.append(
@@ -493,13 +520,13 @@ class BroadcasTheNetUploader(Uploader):
             timeout=60,
         )
 
-        soup = load_html(r.text)
+        soup = load_html(str(r.text))
         if el := soup.select_one("p[style*='color: red']"):
             error = el.text
             eprint(f"Upload failed: [cyan]{error}[/cyan]")
             return False
 
-        id = find(r'<a href="(torrents\.php\?id=\d+)">', r.text)
+        id = find(r'<a href="(torrents\.php\?id=\d+)">', str(r.text))
         if id:
             print(
                 f"Link: https://broadcasthe.net/{id}",
