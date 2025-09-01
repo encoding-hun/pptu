@@ -381,7 +381,7 @@ class PassThePopcorn(Uploader):
                 )
             },
         )
-        soup = load_html(r.text)
+        soup = load_html(str(r.text))
         if error := soup.select_one(".alert--error"):
             eprint(escape(error.get_text()))
             return False

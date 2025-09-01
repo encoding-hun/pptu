@@ -48,7 +48,7 @@ class PPTU:
         note: str | None = None,
         auto: bool = False,
         snapshots: bool = False,
-        dirs: PlatformDirs | None = None,
+        dirs: PlatformDirs,
     ):
         self.path = path
         self.tracker = tracker
