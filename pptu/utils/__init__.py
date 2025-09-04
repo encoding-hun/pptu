@@ -10,14 +10,15 @@ import sys
 from collections.abc import Iterable
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, IO, Literal, NoReturn, overload, Mapping
+from typing import TYPE_CHECKING, Any, IO, Literal, NoReturn, overload
+from collections.abc import Mapping
 
 import click
 import cloup
 import humanize
+import orjson
 import oxipng
 import toml
-import orjson
 from bs4 import BeautifulSoup
 from ordered_set import OrderedSet
 from rich.console import Console

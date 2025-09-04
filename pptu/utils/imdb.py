@@ -5,6 +5,7 @@ import niquests
 
 from pptu.utils import dict_to_json
 
+
 random = SystemRandom()
 
 

@@ -69,7 +69,7 @@ class HDBits(Uploader):
         r"\bHLG\b": 10,  # HLG
         r"\bIMAX\b": 14,  # IMAX
         r"\bOM\b": 58,  # Open Matte
-        r"\bTC\b|(?i)\btheatrical\b": 94,  # Theatrical Cut
+        r"\bTC\b|(?i:\btheatrical\b)": 94,  # Theatrical Cut
         r"\bDC\b": 93,  # Director's Cut
         # Streaming services
         r"\bAMZN\b": 28,  # Amazon
