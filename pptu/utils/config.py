@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import toml
 
-from pptu.utils.log import eprint
 from pptu.utils.click import CaseInsensitiveDict
+from pptu.utils.log import eprint
 
 
 if TYPE_CHECKING:

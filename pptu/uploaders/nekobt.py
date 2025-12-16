@@ -11,20 +11,19 @@ from beaupy import select_multiple
 from guessit import guessit
 from langcodes import Language
 from pymediainfo import MediaInfo
-from rich.status import Status
-from rich.prompt import Prompt
-from rich.tree import Tree
 from rich import print
+from rich.prompt import Prompt
+from rich.status import Status
+from rich.tree import Tree
 
 from pptu.uploaders import Uploader
-from pptu.utils.log import eprint
-from pptu.utils.collections import first_or_else
-from pptu.utils.regex import find
 from pptu.utils import is_close_match
-from pptu.utils.click import comma_separated_param
 from pptu.utils.anilist import extract_name_from_filename, get_anilist_title
-from pptu.utils.log import wprint
+from pptu.utils.click import comma_separated_param
+from pptu.utils.collections import first_or_else
 from pptu.utils.image import ImgUploader
+from pptu.utils.log import eprint, wprint
+from pptu.utils.regex import find
 
 
 if TYPE_CHECKING:

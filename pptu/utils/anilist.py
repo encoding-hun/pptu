@@ -3,10 +3,10 @@ import re
 import httpx
 from guessit import guessit
 
-from pptu.utils.collections import first_or_none, first_or_else
 from pptu.utils import similar
-from pptu.utils.regex import find
+from pptu.utils.collections import first_or_else, first_or_none
 from pptu.utils.log import wprint
+from pptu.utils.regex import find
 
 
 def extract_name_from_filename(file_name: str) -> str:

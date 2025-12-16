@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import oxipng
+from rich.console import Console
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -14,10 +16,9 @@ from rich.progress import (
     TextColumn,
     TimeRemainingColumn,
 )
-from rich.console import Console
 from wand.image import Image
 
-from pptu.utils.log import print, eprint, wprint
+from pptu.utils.log import eprint, print, wprint
 
 
 if TYPE_CHECKING:

@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import humanize
-from rich.text import Text
 from rich.progress import ProgressColumn
+from rich.text import Text
 
 
 if TYPE_CHECKING:
