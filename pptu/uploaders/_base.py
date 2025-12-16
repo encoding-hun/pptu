@@ -10,7 +10,8 @@ import niquests
 from niquests.adapters import HTTPAdapter
 from urllib3_future.util.retry import Retry
 
-from pptu.utils import Config, eprint
+from pptu.utils.config import Config
+from pptu.utils.log import eprint
 
 
 if TYPE_CHECKING:
@@ -24,6 +25,7 @@ class Uploader(ABC):
     snapshots_plus: int = 0  # Number of extra snapshots to generate
     random_snapshots: bool = False
     mediainfo: bool = True
+    needs_login: bool = True
 
     def __init__(self, ctx: cloup.Context) -> None:
         self.dirs = ctx.obj.dirs

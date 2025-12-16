@@ -16,14 +16,9 @@ from rich.table import Table
 from pptu import PROG_NAME, __version__, uploaders
 from pptu.pptu import PPTU
 from pptu.uploaders import Uploader
-from pptu.utils import (
-    AliasedGroup,
-    CaseInsensitiveSection,
-    Config,
-    eprint,
-    print,
-    wprint,
-)
+from pptu.utils.click import AliasedGroup, CaseInsensitiveSection
+from pptu.utils.config import Config
+from pptu.utils.log import eprint, print, wprint
 
 
 CONTEXT_SETTINGS = Context.settings(
@@ -151,11 +146,12 @@ def result(ctx: cloup.Context, trackers: list[Uploader], **kwargs: Any) -> None:
     args = SimpleNamespace(**kwargs)
 
     for tracker in trackers:
-        print("[bold green]Logging in to tracker[/]")
-        print(f"[bold cyan]Logging in to {tracker.cli.aliases[0]}[/]")
-        if not tracker.login(args=args):
-            eprint(f"Failed to log in to tracker [cyan]{tracker.cli.name}[/].")
-            continue
+        if tracker.needs_login:
+            print("[bold green]Logging in to tracker[/]")
+            print(f"[bold cyan]Logging in to {tracker.cli.aliases[0]}[/]")
+            if not tracker.login(args=args):
+                eprint(f"Failed to log in to tracker [cyan]{tracker.cli.name}[/].")
+                continue
         for cookie in tracker.session.cookies:
             tracker.cookie_jar.set_cookie(cookie)
         tracker.cookies_path.parent.mkdir(parents=True, exist_ok=True)
