@@ -144,12 +144,13 @@ Options:
    -lt, --list-trackers               Show the list of supported trackers and exit.
    -h, --help                         Show this message and exit.
 
-Uploaders (7):
+Uploaders (8):
    AvistaZ          https://avistaz.to/
    BroadcasTheNet   https://broadcasthe.net/
    CinemaZ          https://cinemaz.to/
    HDBits           https://hdbits.org/
    nCore            https://ncore.pro/
+   nekoBT           https://nekobt.to/
    PassThePopcorn   https://passthepopcorn.me/
    PrivateHD        https://privatehd.to/
 
