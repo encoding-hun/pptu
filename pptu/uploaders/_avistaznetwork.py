@@ -25,7 +25,8 @@ from rich.prompt import Confirm, Prompt
 
 from pptu import __version__
 from pptu.uploaders import Uploader
-from pptu.utils import eprint, load_html, print, wprint
+from pptu.utils.log import eprint, print, wprint
+from pptu.utils.xml import load_html
 
 
 if TYPE_CHECKING:

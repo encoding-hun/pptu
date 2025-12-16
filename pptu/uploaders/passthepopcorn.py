@@ -5,21 +5,22 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import cloup
-from imdb import Cinemagoer
 from pymediainfo import MediaInfo
 from pyotp import TOTP
 from rich.markup import escape
 from rich.prompt import Prompt
 
 from pptu.uploaders import Uploader
-from pptu.utils import ImgUploader, eprint, load_html, print, wprint
+from pptu.utils.collections import first_or_else
+from pptu.utils.image import ImgUploader
+from pptu.utils.imdb import imdb_data, imdb_search
+from pptu.utils.log import eprint, print, wprint
+from pptu.utils.regex import find
+from pptu.utils.xml import load_html
 
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-
-ia = Cinemagoer()
 
 
 class PassThePopcorn(Uploader):
@@ -182,42 +183,59 @@ class PassThePopcorn(Uploader):
         note: str | None,
         auto: bool,
     ) -> bool:
-        imdb = None
+        imdb_url = None
         try:
             if (m := re.search(r"(.+?)\.S\d+(?:E\d+|\.)", path.name)) or (
                 m := re.search(r"(.+?\.\d{4})\.", path.name)
             ):
                 title = re.sub(r" (\d{4})$", r" (\1)", m.group(1).replace(".", " "))
                 print(f"Detected title: [bold cyan]{title}[/]")
-
-                if imdb_results := ia.search_movie(title):
-                    imdb = f"https://www.imdb.com/title/tt{imdb_results[0].movieID}/"
+                if (imdb_results := imdb_search(title)) and (
+                    imdb_result_first := first_or_else(imdb_results, {})
+                ):
+                    imdb_url = (
+                        f"https://www.imdb.com/title/{imdb_result_first.get('id')}/"
+                    )
             else:
                 wprint("Unable to extract title from filename.")
         except Exception as e:
-            wprint(f"Cinemagoer got error {str(e)}")
-        if not imdb:
+            wprint(f"IMDb got error {str(e)}")
+        if not imdb_url:
             if auto:
                 eprint("Unable to get IMDb URL")
                 return False
-            imdb = Prompt.ask("Enter IMDb URL")
+            imdb_url = Prompt.ask("Enter IMDb URL")
 
-        if not imdb:
+        if not imdb_url:
             eprint("No IMDb URL provided")
             return False
 
-        if not (m := re.search(r"tt(\d+)", imdb)):
+        if not (imdb_id := find(r"tt(\d+)", imdb_url)):
             eprint("Invalid IMDb URL")
             return False
 
-        imdb_movie = ia.get_movie(m.group(1))
-        title = imdb_movie.data.get("original title") or imdb_movie.data.get(
-            "localized title"
+        imdb_movie_data = imdb_data(imdb_id)
+
+        title_data = imdb_movie_data.get("originalTitleText", {}) or imdb_movie_data.get(
+            "titleText", {}
         )
+        year_data = imdb_movie_data.get("releaseYear", {})
+        image_data = imdb_movie_data.get("primaryImage", {})
+        geners_data = imdb_movie_data.get("interests", {}).get("edges", [])
+        geners = ", ".join(
+            [
+                z.get("primaryText", {}).get("text")
+                for x in geners_data
+                if (z := x.get("node"))
+                and z.get("secondaryText", {}).get("text") == "Genre"
+            ]
+        )
+
+        title = title_data.get("text")
         if not title:
             wprint("Unable to get movie title from IMDb")
             title = Prompt.ask("Movie title")
-        year = imdb_movie.data.get("year")
+        year = year_data.get("year")
         if not year:
             wprint("Unable to get movie year from IMDb")
             year = Prompt.ask("Movie year")
@@ -229,10 +247,11 @@ class PassThePopcorn(Uploader):
             url="https://passthepopcorn.me/ajax.php",
             params={
                 "action": "torrent_info",
-                "imdb": imdb,
+                "imdb": imdb_url,
                 "fast": "1",
             },
         ).json()[0]
+
         print("Info to ptp:")
         for key, value in torrent_info.items():
             print(f"{key}: [cyan][bold]{value}[/]")
@@ -329,8 +348,8 @@ class PassThePopcorn(Uploader):
         self.data = {
             "AntiCsrfToken": self.anti_csrf_token,
             "type": type_,
-            "imdb": imdb,
-            "image": imdb_movie.data["cover url"],
+            "imdb": imdb_url,
+            "image": image_data.get("url"),
             "remaster_title": remaster_title,
             "remaster": "on" if remaster_title else "off",
             "remaster_year": "",
@@ -344,7 +363,7 @@ class PassThePopcorn(Uploader):
             "codec": "* Auto-detect",
             "container": "* Auto-detect",
             "resolution": "* Auto-detect",
-            "tags": imdb_movie.data["genres"],
+            "tags": geners,
             "other_resolution_width": "",
             "other_resolution_height": "",
             "release_desc": desc,

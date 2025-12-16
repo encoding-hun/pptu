@@ -13,15 +13,10 @@ from pyotp import TOTP
 from rich.prompt import Prompt
 
 from pptu.uploaders import Uploader
-from pptu.utils import (
-    ImgUploader,
-    eprint,
-    find,
-    generate_thumbnails,
-    load_html,
-    print,
-    wprint,
-)
+from pptu.utils.image import ImgUploader, generate_thumbnails
+from pptu.utils.log import eprint, print, wprint
+from pptu.utils.regex import find
+from pptu.utils.xml import load_html
 
 
 if TYPE_CHECKING:

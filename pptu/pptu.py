@@ -24,15 +24,11 @@ from rich.progress import (
 from torf import Torrent
 from wand.image import Image
 
-from pptu.utils import (
-    Config,
-    CustomTransferSpeedColumn,
-    as_list,
-    eprint,
-    flatten,
-    which,
-    wprint,
-)
+from pptu.utils.collections import as_list, flatten
+from pptu.utils.config import Config
+from pptu.utils.io import which
+from pptu.utils.log import eprint, print, wprint
+from pptu.utils.progress import CustomTransferSpeedColumn
 
 
 if TYPE_CHECKING:
@@ -225,6 +221,7 @@ class PPTU:
                 )[0]
 
             mediainfo = MediaInfo.parse(f, output="", full=False)
+            mediainfo = mediainfo.replace(str(f), f.name)
             mediainfo_path.write_text(mediainfo)
 
         mediainfo_list = [x.strip() for x in re.split(r"\n\n(?=General)", mediainfo)]
