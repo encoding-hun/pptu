@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -29,12 +28,7 @@ class ImgUploader:
     def __init__(self, tracker: Uploader):
         self.tracker = tracker
         self.uploader = tracker.config.get(tracker, "img_uploader")
-        key_ = f"{self.uploader}_api_key"
-        self.api_key = (
-            tracker.config.get("img_uploader", key_, None)
-            or os.environ.get(key_.upper())
-            or None
-        )
+        self.api_key = tracker.config.get("default", f"{self.uploader}_api_key", None)
 
     def hdbimg(
         self, files: list[Path], thumbnail_width: int, name: str
