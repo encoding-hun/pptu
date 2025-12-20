@@ -5,13 +5,10 @@ fast_upload = false
 snapshots = true
 snapshot_columns = 3
 snapshot_rows = 2
+keksh_api_key = ""                   # needed for higher image size max in 5MB without
+ptpimg_api_key = ""                  # required for `ptpimg`
 torrent_creator = "torf"             # torf, torrenttools
 snapshot_row_width = 1000            # will be lowered if it's higher than the site's width for the torrent page
-
-# Image uploaders
-[img_uploaders]
-keksh_api_key = ""  # will be used if provided for higher image size
-ptpimg_api_key = "" # required if uploader is "ptpimg"
 
 # Site credentials and settings
 # Credentials below are required unless you uses cookies instead.
@@ -59,9 +56,8 @@ anonymous_upload = false # default is false
 [nekobt]
 api_key = ""
 img_uploader = "keksh"
-group_at_start = false
+group_at_start = false # Put the group name inside bracket at the start
 # announce_urls = []   # use other then default
 # group_tag = "MYGRP"
-# group_id = "123345"
+# advert = ""          # Option for group link or other message to use in all upload
 # proxy = "http://user:pass@example.com:6060"
-# advert = ""
