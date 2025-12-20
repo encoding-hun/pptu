@@ -90,7 +90,7 @@ class nekoBT(Uploader):
     @staticmethod
     @cloup.command(
         name="nekoBT",
-        aliases=["NBT"],
+        aliases=["nBT"],
         short_help="https://nekobt.to/",
         help=__doc__,
     )
