@@ -56,7 +56,20 @@ def imdb_search(query) -> list[dict[str, Any]]:
     except json.JSONDecodeError:
         raise ValueError("Failed to decode JSON response from IMDb API") from None
 
-    return data.get("d", {})
+    return [
+        x
+        for x in data.get("d", [])
+        if x.get("qid", "").lower()
+        in [
+            "movie",
+            "tvseries",
+            "tvminiseries",
+            "tvspecial",
+            "tvmovie",
+            "tvshort",
+            "documentary",
+        ]
+    ]
 
 
 def imdb_data(title_id) -> dict[str, Any]:
