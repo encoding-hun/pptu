@@ -17,7 +17,7 @@ def comma_separated_param(ctx, param, value) -> list[str] | str:
 
 
 class CaseInsensitiveSection(cloup.Section):
-    def list_commands(self):
+    def list_commands(self) -> list[tuple[str, click.Command]]:
         return sorted(super().list_commands(), key=lambda x: x[0].casefold())
 
 

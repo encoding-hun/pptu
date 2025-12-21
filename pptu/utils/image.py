@@ -134,7 +134,7 @@ class ImgUploader:
         files: list[Path],
         thumbnail_width: int | None = None,
         name: str | None = None,
-    ) -> list[Any | dict[Any, Any] | None] | None:
+    ) -> list[dict[Any, Any] | None] | None:
         if self.uploader == "keksh":
             return self.keksh(files)
         elif self.uploader == "ptpimg":

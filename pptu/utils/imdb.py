@@ -54,7 +54,7 @@ def imdb_search(query) -> list[dict[str, Any]]:
     try:
         data = res.json()
     except json.JSONDecodeError:
-        raise ValueError("Failed to decode JSON response from IMDb API") from None
+        raise ValueError("Failed to decode JSON response from IMDb API") from res
 
     return [
         x
@@ -119,6 +119,6 @@ def imdb_data(title_id) -> dict[str, Any]:
     try:
         data = res.json()
     except json.JSONDecodeError:
-        raise ValueError("Failed to decode JSON response from IMDb API") from None
+        raise ValueError("Failed to decode JSON response from IMDb API") from res
 
     return data.get("data", {}).get("title", {})

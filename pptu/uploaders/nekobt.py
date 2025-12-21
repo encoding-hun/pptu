@@ -32,12 +32,11 @@ if TYPE_CHECKING:
 
 class nekoBT(Uploader):
     source = "nekoBT"
-    min_snapshots = 3
 
-    CATEGORY_MAP = {
+    CATEGORY_MAP: dict[str, int] = {
         "Anime": 1,
     }
-    VIDEO_CODEC_MAP = {
+    VIDEO_CODEC_MAP: dict[str, int] = {
         "AVC": 1,  # H.264
         "HEVC": 2,  # H.265
         "AV1": 3,
@@ -48,7 +47,7 @@ class nekoBT(Uploader):
         "VC-1": 8,
         "Other": 0,
     }
-    VIDEO_TYPE_MAP = {
+    VIDEO_TYPE_MAP: dict[str, int] = {
         "Hybrid": 15,
         "BD - Remux": 14,
         "BD - Encode": 13,
@@ -66,15 +65,7 @@ class nekoBT(Uploader):
         "VHS": 1,
         "Other": 0,
     }
-    SUB_LEVEL_MAP = {
-        "Level 4 - Full-scale Batch": 4,
-        "Level 3 - Full-scale Fansubs": 3,
-        "Level 2 - Small-scale Fansubs": 2,
-        "Level 1 - Slight Modifications": 1,
-        "Level 0 - Official": 0,
-        "No Subtitles": -1,
-    }
-    LANG_CONVERT = {
+    LANG_CONVERT: dict[str, str] = {
         "jp": "ja",
         "eng": "en",
         "en-jp": "enm",
@@ -218,6 +209,7 @@ class nekoBT(Uploader):
         self.fansub_langs_too: tuple[str, ...] = tuple(args.fansub_langs_too)
         self.primary_group_members: tuple[str, ...] = tuple(args.primary_group_members)
         self.primary_group: str = args.primary_group
+        self.secondary_groups: tuple[str, ...] = args.secondary_groups
         self.video_type: int | None = args.video_type
         self.sub_level: int = args.sub_level
 
@@ -277,7 +269,8 @@ class nekoBT(Uploader):
         description: str = ""
         v_codec: int = 0
         name_plus: list[str] = []
-        primary_group_members: list[dict[str, str]] = []
+        primary_group_members: list[dict[str, str | list[dict[str, str]]]] = []
+        secondary_groups: list[dict[str, Any]] = []
 
         if path.is_dir():
             files: list[Path] = sorted([*path.glob("*.mkv"), *path.glob("*.mp4")])
@@ -289,20 +282,24 @@ class nekoBT(Uploader):
                 gi = guessit(path.name)
                 group_name = gi.get("release_group")
 
-        group_info = self._get_group_info(group_name)
-        members = group_info.get("members", [])
-        for member_role in self.primary_group_members:
+        primary_group_info: dict[str, Any | list[Any] | dict[str, Any]] = (
+            self._get_group_info(group_name)
+        )
+        _members: list[dict[str, str]] = primary_group_info.get("members", [])
+        for primary_group_member in self.primary_group_members:
             role = ""
             display_name = ""
-            if ";;" in member_role:
-                temp = member_role.split(";;")
+            if ";;" in primary_group_member:
+                temp = primary_group_member.split(";;")
                 display_name = temp[0]
                 role = temp[-1]
+            else:
+                display_name = primary_group_member
 
             if member := first_or_else(
                 [
                     x
-                    for x in members
+                    for x in _members
                     if x["display_name"] == display_name or x["username"] == display_name
                 ],
                 None,
@@ -318,7 +315,7 @@ class nekoBT(Uploader):
         if not auto:
             if not self.primary_group_members:
                 options = []
-                for x in members:
+                for x in _members:
                     options.append(f"{x['display_name']} [[grey100]{x['id']}[/grey100]]")
 
                 try:
@@ -335,7 +332,7 @@ class nekoBT(Uploader):
                     wprint("Selection cancelled by user.")
 
                 if selected_indices:
-                    for num, member in enumerate(group_info.get("members", [])):
+                    for num, member in enumerate(_members):
                         role = Prompt.ask(f"Role for {member['display_name']}")
                         if num in selected_indices:
                             primary_group_members.append(
@@ -345,6 +342,28 @@ class nekoBT(Uploader):
                                     "role": role,
                                 }
                             )
+
+        for secondary_group in self.secondary_groups:
+            role = ""
+            secondary_group_name = ""
+            if ";;" in secondary_group:
+                temp = secondary_group.split(";;")
+                display_name = temp[0]
+                role = temp[-1]
+            else:
+                secondary_group_name = secondary_group
+
+            secondary_group_info = self._get_group_info(secondary_group_name)
+
+            if not role:
+                role = Prompt.ask(f"Role for {secondary_group_name}")
+
+            secondary_groups.append(
+                {
+                    "id": secondary_group_info.get("id", ""),
+                    "role": role,
+                }
+            )
 
         try:
             with Status(f"[bold magenta]Parsing {files[0]}...") as _:
@@ -412,12 +431,13 @@ class nekoBT(Uploader):
         uploader = ImgUploader(self)
         if images := uploader.upload(snapshots):
             for i, image in enumerate(images, start=1):
-                url = f"https://i.kek.sh/{image['filename']}"
-                description += f"| [![]({url})]({url}) "
-                if i == columns:
-                    description += f"\n{'|---' * columns}|\n"
-                elif i % rows == 0:
-                    description += "\n"
+                if image:
+                    url = f"https://i.kek.sh/{image['filename']}"
+                    description += f"| [![]({url})]({url}) "
+                    if i == columns:
+                        description += f"\n{'|---' * columns}|\n"
+                    elif i % rows == 0:
+                        description += "\n"
 
         if auto:
             if not self.video_type and re.search(r"\bweb-dl?\b", str(path), flags=re.I):
@@ -437,10 +457,10 @@ class nekoBT(Uploader):
             "hardsub": self.hardsub,
             "anonymous": self.anonymous,
             "primary_group": {
-                "id": group_info.get("id"),
+                "id": primary_group_info.get("id"),
                 "members": primary_group_members,
             },
-            "secondary_groups": [],  # TODO
+            "secondary_groups": secondary_groups,
             "audio_langs": ",".join(audios_langs).lower(),
             "sub_langs": ",".join(subtitles_langs).lower(),
             "fansub_langs": fansub_langs,
