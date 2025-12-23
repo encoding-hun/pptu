@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "pptu"
 description = "Python P2P Torrent Uploader"
-version = "2025.12.16"
+version = "2025.12.24"
 authors = [{ name = "pcroland" }, { name = "varyg" }]
 requires-python = "<3.14,>=3.10"
 dependencies = [
