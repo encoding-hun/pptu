@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import glob
+import math
 import random
 import re
 import shutil
@@ -46,16 +47,16 @@ class PPTU:
         snapshots: bool = False,
         dirs: PlatformDirs,
     ):
-        self.path = path
+        self.path: Path = path
         self.tracker = tracker
-        self.note = note
-        self.auto = auto
+        self.note: str | None = note
+        self.auto: bool = auto
 
-        self.cache_dir = dirs.user_cache_path / f"{path.name}_files"
+        self.cache_dir: Path = dirs.user_cache_path / f"{path.name}_files"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.config = Config(dirs.user_config_path / "config.toml")
 
-        self.torrent_path = (
+        self.torrent_path: Path = (
             self.cache_dir / f"{self.path.name}[{self.tracker.cli.aliases[0]}].torrent"
         )
         if snapshots and self.config.get(tracker, "snapshots", True):
@@ -93,6 +94,19 @@ class PPTU:
         if self.torrent_path.exists():
             return True
 
+        piece_size = 2**18
+
+        if self.path.is_file():
+            total_bytes = self.path.stat().st_size
+        else:
+            total_bytes = sum(
+                f.stat().st_size for f in self.path.rglob("*") if f.is_file()
+            )
+
+        target_pieces = 1500
+        exponent = max(18, min(24, round(math.log2(total_bytes / target_pieces))))
+        piece_size = 2**exponent
+
         if torrent_creator == "torf":
             torrent = Torrent(
                 self.path,
@@ -101,6 +115,7 @@ class PPTU:
                 source=self.tracker.source,
                 created_by=None,
                 creation_date=None,
+                piece_size=piece_size,
                 randomize_infohash=not self.tracker.source,
                 exclude_regexs=[self.tracker.exclude_regex],
             )
@@ -134,7 +149,9 @@ class PPTU:
                         pieces_total: int,
                     ) -> None:
                         if filepath not in files:
-                            print(f"Hashing {Path(filepath).name}...")
+                            progress.console.print(
+                                f"[bold white]Hashing [not bold white]{Path(filepath).name}..."
+                            )
                             files.append(filepath)
 
                         progress.update(
@@ -159,8 +176,7 @@ class PPTU:
                         "edit",
                         "--no-created-by",
                         "--no-creation-date",
-                        "--announce",
-                        " ".join(announce_url),
+                        *([f"-a {x}" for x in announce_url]),
                         *(["-s", self.tracker.source] if self.tracker.source else []),
                         "--private",
                         "on",
@@ -180,8 +196,7 @@ class PPTU:
                         "--no-cross-seed",
                         "--exclude",
                         r".*\.(ffindex|jpg|nfo|png|srt|torrent|txt)$",
-                        "--announce",
-                        " ".join(announce_url),
+                        *([f"-a {x}" for x in announce_url]),
                         *(["-s", self.tracker.source] if self.tracker.source else []),
                         "--private",
                         "on",
@@ -199,18 +214,18 @@ class PPTU:
             eprint(f"Invalid torrent creator: {torrent_creator}", fatal=True)
 
     def get_mediainfo(self) -> str | list[str]:
-        mediainfo_path = self.cache_dir / "mediainfo.txt"
+        mediainfo_path: Path = self.cache_dir / "mediainfo.txt"
         if self.tracker.all_files and self.path.is_dir():
             mediainfo_path = self.cache_dir / "mediainfo_all.txt"
 
         mediainfo = ""
 
         if mediainfo_path.exists():
-            mediainfo = mediainfo_path.read_text().strip()
+            mediainfo: str = mediainfo_path.read_text().strip()
 
         if not mediainfo:
             if self.path.is_file() or self.tracker.all_files:
-                f = self.path
+                f: Path = self.path
             else:
                 f = sorted(
                     [
@@ -275,7 +290,7 @@ class PPTU:
                         j = 0
                     last_file = files[i]
 
-                    snap = self.cache_dir / "{num:02}{suffix}.png".format(
+                    snap: Path = self.cache_dir / "{num:02}{suffix}.png".format(
                         num=i + 1,
                         suffix=(
                             ("_all" if self.tracker.all_files else "")
@@ -343,7 +358,7 @@ class PPTU:
             eprint(f"Upload to [cyan]{self.tracker.cli.name}[/] failed.")
             return
 
-        torrent_path = (
+        torrent_path: Path = (
             self.cache_dir / f"{self.path.name}[{self.tracker.cli.aliases[0]}].torrent"
         )
         if watch_dir := self.config.get(self.tracker, "watch_dir"):

@@ -213,7 +213,7 @@ class nekoBT(Uploader):
         self.video_type: int | None = args.video_type
         self.sub_level: int = args.sub_level
 
-        self.data = {}
+        self.data: dict[str, Any] = {}
 
         if not self.video_type:
             eprint("Missing video type!\n", fatal=False)
@@ -226,8 +226,8 @@ class nekoBT(Uploader):
     @property
     def announce_url(self) -> list[str]:
         default_t = [
-            "https://tracker.nekobt.to/api/tracker/public/announce",
             "https://tracker.nekobt.to/api/tracker/{passkey}/announce",
+            "https://tracker.nekobt.to/api/tracker/public/announce",
         ]
         if external_t := self.config.get(self, "announce_urls", ""):
             default_t.extend(external_t)
