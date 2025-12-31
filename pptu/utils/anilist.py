@@ -9,23 +9,33 @@ from pptu.utils.log import wprint
 from pptu.utils.regex import find
 
 
-def extract_name_from_filename(file_name: str) -> str:
+def extract_name_from_filename(file_name: str) -> tuple[str, bool]:
+    is_movie = False
+
     gi = guessit(file_name)
+    is_movie = gi.get("type") == "movie"
     if name := gi.get("title"):
         name.replace(".", " ")[:100]
     name = re.sub(r"[\.|\-]S\d+.*", "", file_name)
     if name == file_name:
         name = re.sub(r"[\.|\-]\d{4}\..*", "", file_name)
+        if name != file_name:
+            is_movie = True
     name = name.replace(".", " ")[:100]
 
-    return name
+    return name, is_movie
 
 
 def get_anilist_title(
-    search_name: str, non_english: bool = False, anilist_data: dict | None = None
+    search_name: str = "", non_english: bool = False, anilist_data: dict | None = None
 ) -> str | None:
-    if not anilist_data:
+    if not anilist_data and search_name:
         anilist_data = get_anilist_data(search_name)
+    else:
+        return None
+
+    if not anilist_data:
+        raise ValueError("No anilist_data")
 
     title: dict[str, str] = anilist_data.get("title", {})
     if non_english and title.get("english"):
@@ -45,7 +55,9 @@ def get_anilist_title(
     return None
 
 
-def get_anilist_data(search_name: str, anilist_url: str = "") -> dict[str, str | int]:
+def get_anilist_data(
+    search_name: str = "", anilist_url: str = ""
+) -> dict[str, str | int]:
     if anilist_url:
         anilist_id = find(r"https://anilist.co/anime/(\d+)", anilist_url)
         json_data = {

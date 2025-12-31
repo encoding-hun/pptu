@@ -18,7 +18,11 @@ from rich.tree import Tree
 
 from pptu.uploaders import Uploader
 from pptu.utils import is_close_match
-from pptu.utils.anilist import extract_name_from_filename, get_anilist_title
+from pptu.utils.anilist import (
+    extract_name_from_filename,
+    get_anilist_data,
+    get_anilist_title,
+)
 from pptu.utils.click import comma_separated_param
 from pptu.utils.collections import first_or_else
 from pptu.utils.image import ImgUploader
@@ -85,109 +89,136 @@ class nekoBT(Uploader):
         short_help="https://nekobt.to/",
         help=__doc__,
     )
-    @cloup.option(
-        "-m",
-        "--movie",
-        is_flag=True,
-        default=False,
-        help="This torrent only contains a movie.",
+    @cloup.option_group(
+        "Release Metadata",
+        cloup.option(
+            "-m",
+            "--movie",
+            is_flag=True,
+            default=False,
+            help="This torrent only contains a movie.",
+        ),
+        cloup.option(
+            "-vt",
+            "--video-type",
+            type=cloup.Choice([str(i) for i in range(16)]),
+            metavar="ID",
+            default=None,
+            help="Set video type with ID. (https://wiki.nekobt.to/info/metadata/#video-type)",
+        ),
+        cloup.option(
+            "-l",
+            "--link",
+            type=str,
+            metavar="URL",
+            default=None,
+            help="Anilist link to use for title.",
+        ),
+        cloup.option(
+            "-npi",
+            "--no-plus-info",
+            is_flag=True,
+            default=False,
+            help="Skip romaji title and 'Multi-Subs' in display name",
+        ),
     )
-    @cloup.option(
-        "-hi",
-        "--hidden",
-        is_flag=True,
-        default=False,
-        help="Hidden Torrent",
+    @cloup.option_group(
+        "Translation & Subtitles",
+        cloup.option(
+            "-sl",
+            "--sub-level",
+            type=cloup.Choice(["-1", "0", "1", "2", "3", "4"]),
+            metavar="LEVEL",
+            default="0",
+            help="Set subtitle level (-1 = no subs). Default: 0.",
+        ),
+        cloup.option(
+            "-mtl",
+            "--machine-translation",
+            is_flag=True,
+            default=False,
+            help="The release uses machine translation for their fansubs.",
+        ),
+        cloup.option(
+            "-ot",
+            "--original-translation",
+            is_flag=True,
+            default=False,
+            help="Release uses original translation for their fansubs.",
+        ),
+        cloup.option(
+            "-hs",
+            "--hardsub",
+            is_flag=True,
+            default=False,
+            help="The fansubs are hardsubbed ('burnt in') into the video.",
+        ),
+        cloup.option(
+            "-flo",
+            "--fansub-langs-only",
+            default="",
+            callback=comma_separated_param,
+            metavar="LANG",
+            help="Subtitle languages to set as fansub only. (Comma-separated)",
+        ),
+        cloup.option(
+            "-flt",
+            "--fansub-langs-too",
+            default="",
+            callback=comma_separated_param,
+            metavar="LANG",
+            help="Subtitle languages to set as fansub too. (Comma-separated)",
+        ),
     )
-    @cloup.option(
-        "-a",
-        "--anonymous",
-        is_flag=True,
-        default=False,
-        help="Upload Anonymously",
+    @cloup.option_group(
+        "Group Information",
+        cloup.option(
+            "-pg",
+            "--primary-group",
+            default="",
+            metavar="GROUP",
+            help="Primary group, if not set in config.",
+        ),
+        cloup.option(
+            "-pgm",
+            "--primary-group-members",
+            default="",
+            callback=comma_separated_param,
+            metavar="NAME",
+            help="Primary group members. (Comma-separated)",
+        ),
+        cloup.option(
+            "-sg",
+            "--secondary-groups",
+            default="",
+            callback=comma_separated_param,
+            metavar="GROUPS;;ROLE",
+            help="Secondary groups. (Comma-separated)",
+        ),
     )
-    @cloup.option(
-        "-mtl",
-        "--machine-translation",
-        is_flag=True,
-        default=False,
-        help="The release uses machine translation for their fansubs.",
-    )
-    @cloup.option(
-        "-ot",
-        "--original-translation",
-        is_flag=True,
-        default=False,
-        help="Release uses original translation for their fansubs.",
-    )
-    @cloup.option(
-        "-hs",
-        "--hardsub",
-        is_flag=True,
-        default=False,
-        help="The fansubs are hardsubbed ('burnt in') into the video.",
-    )
-    @cloup.option(
-        "-npi",
-        "--no-plus-info",
-        is_flag=True,
-        default=False,
-        help="Skip romaji title and 'Multi-Subs' in display name",
-    )
-    @cloup.option(
-        "-flo",
-        "--fansub-langs-only",
-        default="",
-        callback=comma_separated_param,
-        metavar="LANG",
-        help="Subtitle languages to set as fansub only. (Comma-separated)",
-    )
-    @cloup.option(
-        "-flt",
-        "--fansub-langs-too",
-        default="",
-        callback=comma_separated_param,
-        metavar="LANG",
-        help="Subtitle languages to set as fansub too. (Comma-separated)",
-    )
-    @cloup.option(
-        "-pgm",
-        "--primary-group-members",
-        default="",
-        callback=comma_separated_param,
-        metavar="NAME",
-        help="Primary group members. (Comma-separated)",
-    )
-    @cloup.option(
-        "-pg",
-        "--primary-group",
-        default="",
-        metavar="GROUP",
-        help="Primary group, if not set in config. (Comma-separated)",
-    )
-    @cloup.option(
-        "-sg",
-        "--secondary-groups",
-        default="",
-        callback=comma_separated_param,
-        metavar="GROUPS;;ROLE",
-        help="Secondary groups. (Comma-separated)",
-    )
-    @cloup.option(
-        "-vt",
-        "--video-type",
-        type=cloup.Choice([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]),
-        metavar="ID",
-        default=None,
-        help="Set video type with ID. (https://wiki.nekobt.to/info/metadata/#video-type)",
-    )
-    @cloup.option(
-        "-sl",
-        "--sub-level",
-        type=cloup.Choice([-1, 0, 1, 2, 3, 4]),
-        metavar="LEVEL",
-        default=0,
-        help="Set subtitle level (-1 = no subs). Default: 0. (https://wiki.nekobt.to/info/sub-levels/)",
+    @cloup.option_group(
+        "Upload Options",
+        cloup.option(
+            "-iw",
+            "--ignore-warnings",
+            is_flag=True,
+            default=False,
+            help="Ignore validation warnings, and upload.",
+        ),
+        cloup.option(
+            "-hi",
+            "--hidden",
+            is_flag=True,
+            default=False,
+            help="Hidden Torrent.",
+        ),
+        cloup.option(
+            "-a",
+            "--anonymous",
+            is_flag=True,
+            default=False,
+            help="Upload Anonymously.",
+        ),
     )
     @cloup.pass_context
     def cli(ctx: cloup.Context, **kwargs: Any) -> nekoBT:
@@ -212,6 +243,8 @@ class nekoBT(Uploader):
         self.secondary_groups: tuple[str, ...] = args.secondary_groups
         self.video_type: int | None = args.video_type
         self.sub_level: int = args.sub_level
+        self.link: str = args.link
+        self.ignore_warnings: bool = args.ignore_warnings
 
         self.data: dict[str, Any] = {}
 
@@ -412,9 +445,17 @@ class nekoBT(Uploader):
                 [x for x in subtitles_langs if is_close_match(x, self.fansub_langs_too)]
             )
 
+        title, is_movie = extract_name_from_filename(path.stem)
+
+        if is_movie and not self.movie:
+            print("Movie detected")
+            self.movie = True
+
         if not self.no_plus_info:
-            title = extract_name_from_filename(path.stem)
-            if plus_title := get_anilist_title(search_name=title):
+            if self.link and (plus_data := get_anilist_data(anilist_url=self.link)):
+                if plus_title := get_anilist_title(anilist_data=plus_data):
+                    name_plus.append(plus_title)
+            elif plus_title := get_anilist_title(search_name=title):
                 name_plus.append(plus_title)
             if len(subtitles_langs) > 1:
                 name_plus.append("Multi-Subs")
@@ -466,6 +507,7 @@ class nekoBT(Uploader):
             "fansub_langs": fansub_langs,
             "description": description,
             "mediainfo": mediainfo,
+            "ignore_warnings": self.ignore_warnings,
         }
 
         res = self.session.put(
