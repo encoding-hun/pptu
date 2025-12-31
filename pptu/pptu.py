@@ -111,7 +111,7 @@ class PPTU:
             torrent = Torrent(
                 self.path,
                 trackers=announce_url,
-                private=True,
+                private=self.tracker.private,
                 source=self.tracker.source,
                 created_by=None,
                 creation_date=None,
@@ -130,7 +130,7 @@ class PPTU:
                     torrent.trackers = announce_url
                     torrent.randomize_infohash = True
                     torrent.source = self.tracker.source
-                    torrent.private = True
+                    torrent.private = self.tracker.private
                     torrent.write(self.torrent_path)
             else:
                 print()
@@ -179,7 +179,7 @@ class PPTU:
                         *([f"-a {x}" for x in announce_url]),
                         *(["-s", self.tracker.source] if self.tracker.source else []),
                         "--private",
-                        "on",
+                        ["off", "on"][self.tracker.private],
                         "--output",
                         self.torrent_path,
                         base_torrent_path,
@@ -199,7 +199,7 @@ class PPTU:
                         *([f"-a {x}" for x in announce_url]),
                         *(["-s", self.tracker.source] if self.tracker.source else []),
                         "--private",
-                        "on",
+                        ["off", "on"][self.tracker.private],
                         "--piece-size",
                         "16M",
                         "--output",

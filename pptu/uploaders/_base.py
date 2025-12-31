@@ -26,6 +26,7 @@ class Uploader(ABC):
     random_snapshots: bool = False
     mediainfo: bool = True
     needs_login: bool = True
+    private: bool = True
 
     def __init__(self, ctx: cloup.Context) -> None:
         self.dirs = ctx.obj.dirs

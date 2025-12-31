@@ -228,6 +228,7 @@ class nekoBT(Uploader):
         super().__init__(ctx)
 
         self.needs_login = False
+        self.private = False
 
         self.movie: bool = args.movie
         self.hidden: bool = args.hidden
@@ -259,9 +260,15 @@ class nekoBT(Uploader):
     @property
     def announce_url(self) -> list[str]:
         default_t = [
-            "https://tracker.nekobt.to/api/tracker/{passkey}/announce",
             "https://tracker.nekobt.to/api/tracker/public/announce",
         ]
+
+        if self.config.get(self, "watch_dir"):
+            self.private = True
+            default_t.append(
+                "https://tracker.nekobt.to/api/tracker/{passkey}/announce",
+            )
+
         if external_t := self.config.get(self, "announce_urls", ""):
             default_t.extend(external_t)
 
@@ -273,19 +280,20 @@ class nekoBT(Uploader):
 
     @property
     def passkey(self) -> str | None:
-        res = self.session.get(
-            url="https://nekobt.to/api/v1/users/@me",
-            cookies={"ssid": self.config.get(self, "api_key", "")},
-        ).json()
+        if self.config.get(self, "watch_dir"):
+            res = self.session.get(
+                url="https://nekobt.to/api/v1/users/@me",
+                cookies={"ssid": self.config.get(self, "api_key", "")},
+            ).json()
 
-        if res.get("error"):
-            eprint(res.get("message"), fatal=False)
-            return None
+            if res.get("error"):
+                eprint(res.get("message"), fatal=False)
+                return None
 
-        info: dict[str, str] = res.get("data", {})
+            info: dict[str, str] = res.get("data", {})
 
-        if torrent_key := info.get("torrent_key"):
-            return torrent_key
+            if torrent_key := info.get("torrent_key"):
+                return torrent_key
 
         return None
 
@@ -421,6 +429,10 @@ class nekoBT(Uploader):
                 for x in mediainfo_data.text_tracks
             )
         )
+
+        if len(subtitles_langs) == 0:
+            print("No subtitle detected")
+            self.sub_level = -1
 
         fansub_langs = ""
         if self.fansub_langs_only:
