@@ -3,7 +3,7 @@
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.9
+    rev: v0.14.10
     hooks:
       - id: ruff
         args: [--fix]
@@ -53,7 +53,7 @@ repos:
     rev: v3.21.2
     hooks:
       - id: pyupgrade
-        args: [--py311-plus, --keep-runtime-typing]
+        args: [--py310-plus, --keep-runtime-typing]
 
   - repo: https://github.com/jendrikseipp/vulture
     rev: v2.14
@@ -70,3 +70,17 @@ repos:
     hooks:
       - id: yesqa
         name: yesqa
+
+#  - repo: local
+#    hooks:
+#      - id: ty
+#        name: ty
+#        entry: uv run ty check .
+#        language: system
+#        types: [python]
+#        pass_filenames: false
+
+#  - repo: https://github.com/NSPC911/ty-pre-commit
+#    rev: v0.0.8
+#    hooks:
+#      - id: ty-check

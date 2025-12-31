@@ -42,7 +42,8 @@ allow-direct-references = true
 [dependency-groups]
 dev = [
     "isort<6.0.0,>=5.10.1",
-    "ruff<1.0.0,>=0.12.0",
+    "ruff<1.0.0,>=0.14.0",
+    "ty<1.0.0,>=0.0.8",
     "mypy<2.0,>=1.17",
     "pep8-naming<1.0.0,>=0.13.2",
     "pre-commit<4.0.0,>=3.0.0",
