@@ -35,11 +35,6 @@ if TYPE_CHECKING:
 
 
 class nekoBT(Uploader):
-    source = "nekoBT"
-
-    CATEGORY_MAP: dict[str, int] = {
-        "Anime": 1,
-    }
     VIDEO_CODEC_MAP: dict[str, int] = {
         "AVC": 1,  # H.264
         "HEVC": 2,  # H.265
@@ -231,21 +226,24 @@ class nekoBT(Uploader):
         self.private = False
 
         self.movie: bool = args.movie
-        self.hidden: bool = args.hidden
-        self.anonymous: bool = args.anonymous
+        self.video_type: int | None = args.video_type
+        self.link: str = args.link
+        self.no_plus_info: bool = args.no_plus_info
+
+        self.sub_level: int = args.sub_level
         self.mtl: bool = args.machine_translation
         self.otl: bool = args.original_translation
         self.hardsub: bool = args.hardsub
-        self.no_plus_info: bool = args.no_plus_info
         self.fansub_langs_only: tuple[str, ...] = tuple(args.fansub_langs_only)
         self.fansub_langs_too: tuple[str, ...] = tuple(args.fansub_langs_too)
-        self.primary_group_members: tuple[str, ...] = tuple(args.primary_group_members)
+
         self.primary_group: str = args.primary_group
+        self.primary_group_members: tuple[str, ...] = tuple(args.primary_group_members)
         self.secondary_groups: tuple[str, ...] = args.secondary_groups
-        self.video_type: int | None = args.video_type
-        self.sub_level: int = args.sub_level
-        self.link: str = args.link
+
         self.ignore_warnings: bool = args.ignore_warnings
+        self.hidden: bool = args.hidden
+        self.anonymous: bool = args.anonymous
 
         self.data: dict[str, Any] = {}
 
@@ -323,10 +321,11 @@ class nekoBT(Uploader):
                 gi = guessit(path.name)
                 group_name = gi.get("release_group")
 
-        primary_group_info: dict[str, Any | list[Any] | dict[str, Any]] = (
-            self._get_group_info(group_name)
+        primary_group_info: Any = self._get_group_info(group_name)
+        members_from_primary_group: list[dict[str, Any]] = primary_group_info.get(
+            "members", []
         )
-        _members: list[dict[str, str]] = primary_group_info.get("members", [])
+
         for primary_group_member in self.primary_group_members:
             role = ""
             display_name = ""
@@ -340,7 +339,7 @@ class nekoBT(Uploader):
             if member := first_or_else(
                 [
                     x
-                    for x in _members
+                    for x in members_from_primary_group
                     if x["display_name"] == display_name or x["username"] == display_name
                 ],
                 None,
@@ -356,8 +355,10 @@ class nekoBT(Uploader):
         if not auto:
             if not self.primary_group_members:
                 options = []
-                for x in _members:
-                    options.append(f"{x['display_name']} [[grey100]{x['id']}[/grey100]]")
+                for member in members_from_primary_group:
+                    options.append(
+                        f"{member['display_name']} [[grey100]{member['id']}[/grey100]]"
+                    )
 
                 try:
                     selected_indices = select_multiple(
@@ -373,7 +374,7 @@ class nekoBT(Uploader):
                     wprint("Selection cancelled by user.")
 
                 if selected_indices:
-                    for num, member in enumerate(_members):
+                    for num, member in enumerate(members_from_primary_group):
                         role = Prompt.ask(f"Role for {member['display_name']}")
                         if num in selected_indices:
                             primary_group_members.append(
@@ -476,10 +477,10 @@ class nekoBT(Uploader):
         rows = self.config.get(self, "snapshot_rows", 2)
 
         if note:
-            description = f">{note}\n\n---\n\n"
+            description = f">{note}\n\n<br><hr><br>\n"
 
         if advert := self.config.get(self, "advert", ""):
-            description += f"{advert}\n\n---\n\n"
+            description += f"{advert}\n<br><hr><br>\n"
 
         uploader = ImgUploader(self)
         if images := uploader.upload(snapshots):
@@ -549,14 +550,12 @@ class nekoBT(Uploader):
         info = res.get("data", {})
 
         if warns := info.get("warns", []):
-            print(f"Warnings from {self.cli.name}:")
             for warn in warns:
-                wprint(warn)
+                wprint(f"Warning from {self.cli.name}: {warn}")
 
         if fails := info.get("fails", []):
-            print(f"Fails from {self.cli.name}:")
             for fail in fails:
-                eprint(fail, fatal=False)
+                eprint(f"Fail from {self.cli.name}: {fail}", fatal=False)
 
         return True
 
@@ -578,11 +577,11 @@ class nekoBT(Uploader):
 
         if warns := res.get("warns", []):
             for warn in warns:
-                wprint(warn)
+                wprint(f"Warning from {self.cli.name}: {warn}")
 
         if fails := res.get("fails", []):
             for fail in fails:
-                eprint(fail, fatal=False)
+                eprint(f"Fail from {self.cli.name}: {fail}", fatal=False)
 
         if res.get("error"):
             eprint(res.get("message"), fatal=False)
@@ -592,7 +591,7 @@ class nekoBT(Uploader):
 
     def _get_group_info(
         self, grp_name: str | None = None, grp_id: str | int | None = None
-    ) -> dict[str, Any | list[Any] | dict[str, Any]]:
+    ) -> Any:
         if grp_name:
             res = self.session.get(
                 "https://nekobt.to/api/v1/groups/search",
