@@ -5,13 +5,10 @@ fast_upload = false
 snapshots = true
 snapshot_columns = 3
 snapshot_rows = 2
-torrent_creator = "torf" # torf, torrenttools
-snapshot_row_width = 1000 # will be lowered if it's higher than the site's width for the torrent page
-
-# Image uploaders
-[img_uploaders]
-keksh_api_key = "" # will be used if provided for higher image size
-ptpimg_api_key = "" # required if uploader is "ptpimg"
+keksh_api_key = ""                   # needed for higher image size max in 5MB without
+ptpimg_api_key = ""                  # required for `ptpimg`
+torrent_creator = "torf"             # torf, torrenttools
+snapshot_row_width = 1000            # will be lowered if it's higher than the site's width for the torrent page
 
 # Site credentials and settings
 # Credentials below are required unless you uses cookies instead.
@@ -28,7 +25,7 @@ username = ""
 password = ""
 img_uploader = "keksh"
 totp_secret = ""
-fasttorrent = true # set to false if <24 Mbps upload speed
+fasttorrent = true     # set to false if <24 Mbps upload speed
 # proxy = "http://user:pass@example.com:6060"
 
 [hdbits]
@@ -41,7 +38,7 @@ totp_secret = ""
 [passthepopcorn]
 username = ""
 password = ""
-passkey = "" # required for credential auth, auto-detected when using cookies
+passkey = ""            # required for credential auth, auto-detected when using cookies
 img_uploader = "ptpimg"
 # personal_rip_tags = ["MYGRP"]
 # proxy = "http://user:pass@example.com:6060"
@@ -51,7 +48,16 @@ username = ""
 password = ""
 img_uploader = "keksh"
 totp_secret = ""
-description = true # port, mafab, true, false
-snapshot_rows = 3 # default is 3 suggested to not use more
+description = true       # port, mafab, true, false
+snapshot_rows = 3        # default is 3 suggested to not use more
 anonymous_upload = false # default is false
+# proxy = "http://user:pass@example.com:6060"
+
+[nekobt]
+api_key = ""
+img_uploader = "keksh"
+group_at_start = false # Put the group name inside bracket at the start
+# announce_urls = []   # use other then default
+# group_tag = "MYGRP"
+# advert = ""          # Option for group link or other message to use in all upload
 # proxy = "http://user:pass@example.com:6060"

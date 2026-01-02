@@ -13,15 +13,10 @@ from pyotp import TOTP
 from rich.prompt import Prompt
 
 from pptu.uploaders import Uploader
-from pptu.utils import (
-    ImgUploader,
-    eprint,
-    find,
-    generate_thumbnails,
-    load_html,
-    print,
-    wprint,
-)
+from pptu.utils.image import ImgUploader, generate_thumbnails
+from pptu.utils.log import eprint, print, wprint
+from pptu.utils.regex import find
+from pptu.utils.xml import load_html
 
 
 if TYPE_CHECKING:
@@ -353,16 +348,16 @@ class BroadcasTheNet(Uploader):
             ).replace("..", ".")
 
         thumbnails_str = ""
-        if self.config.get(self, "img_uploaders"):
-            uploader = ImgUploader(self)
-            snapshot_urls = []
-            for snapshot in uploader.upload(snapshots):
-                snapshot_urls.append(
-                    f"https://i.kek.sh/{snapshot['filename']}"
-                    if snapshot.get("filename")
-                    else ""
-                )
+        uploader = ImgUploader(self)
+        snapshot_urls = []
+        for snapshot in uploader.upload(snapshots):
+            snapshot_urls.append(
+                f"https://i.kek.sh/{snapshot['filename']}"
+                if snapshot.get("filename")
+                else ""
+            )
 
+        if snapshot_urls:
             thumbnail_row_width = min(
                 530, self.config.get(self, "snapshot_row_width", 530)
             )
@@ -389,8 +384,6 @@ class BroadcasTheNet(Uploader):
                     thumbnails_str += " "
                 else:
                     thumbnails_str += "\n"
-        else:
-            wprint("No imgbin API key specified, skipping snapshots")
 
         series_id = None
         if el := soup.select_one("[name=seriesid]"):

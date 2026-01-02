@@ -8,19 +8,19 @@ from typing import TYPE_CHECKING, Any
 
 import cloup
 from guessit import guessit
-from imdb import Cinemagoer
 from pyotp import TOTP
 from rich.prompt import Prompt
 
 from pptu.uploaders import Uploader
-from pptu.utils import ImgUploader, eprint, load_html, print, wprint
+from pptu.utils.collections import first_or_else
+from pptu.utils.image import ImgUploader
+from pptu.utils.imdb import imdb_search
+from pptu.utils.log import eprint, print, wprint
+from pptu.utils.xml import load_html
 
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-
-ia = Cinemagoer()
 
 
 class HDBits(Uploader):
@@ -266,12 +266,14 @@ class HDBits(Uploader):
                 title = re.sub(r" (\d{4})$", r" (\1)", m.group(1).replace(".", " "))
                 print(f"Detected title: [bold cyan]{title}[/]")
 
-                if imdb_results := ia.search_movie(title):
+                if (imdb_results := imdb_search(title)) and (
+                    imdb_result_first := first_or_else(imdb_results, {})
+                ):
                     # needs more testing
                     # imdb_results.sort(
                     #    key=lambda x: similar(x.data["title"], title), reverse=True
                     # )
-                    imdb = f"https://www.imdb.com/title/tt{imdb_results[0].movieID}/"
+                    imdb = f"https://www.imdb.com/title/{imdb_result_first.get('id')}/"
             else:
                 wprint("Unable to extract title from filename.")
             imdb = imdb or input("Enter IMDb URL: ")

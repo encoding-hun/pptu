@@ -10,7 +10,6 @@ import httpx
 import niquests
 import orjson
 from guessit import guessit
-from imdb import Cinemagoer
 from langcodes import Language
 from pymediainfo import MediaInfo
 from pyotp import TOTP
@@ -18,20 +17,12 @@ from rich.prompt import Prompt
 from rich.status import Status
 
 from pptu.uploaders import Uploader
-from pptu.utils import (
-    ImgUploader,
-    eprint,
-    find,
-    first,
-    first_or_none,
-    generate_thumbnails,
-    load_html,
-    print,
-    wprint,
-)
-
-
-ia = Cinemagoer()
+from pptu.utils.collections import first, first_or_else, first_or_none
+from pptu.utils.image import ImgUploader, generate_thumbnails
+from pptu.utils.imdb import imdb_search
+from pptu.utils.log import eprint, print, wprint
+from pptu.utils.regex import find
+from pptu.utils.xml import load_html
 
 
 class nCore(Uploader):
@@ -217,9 +208,10 @@ class nCore(Uploader):
                 m := re.search(r"(.+?\.\d{4})\.", path.name)
             ):
                 title = re.sub(r" (\d{4})$", r" (\1)", m.group(1).replace(".", " "))
-
-                if imdb_results := ia.search_movie(title):
-                    imdb_id = imdb_results[0].movieID
+                if (imdb_results := imdb_search(title)) and (
+                    imdb_result_first := first_or_else(imdb_results, {})
+                ):
+                    imdb_id = imdb_result_first.get("id")
 
         if not imdb_id:
             if auto:
