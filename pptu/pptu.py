@@ -107,6 +107,11 @@ class PPTU:
         exponent = max(18, min(24, round(math.log2(total_bytes / target_pieces))))
         piece_size = 2**exponent
 
+        if isinstance(self.tracker.randomize_infohash, bool):
+            randomize_infohash = self.tracker.randomize_infohash
+        else:
+            randomize_infohash = not self.tracker.source
+
         if torrent_creator == "torf":
             torrent = Torrent(
                 self.path,
@@ -116,7 +121,7 @@ class PPTU:
                 created_by=None,
                 creation_date=None,
                 piece_size=piece_size,
-                randomize_infohash=not self.tracker.source,
+                randomize_infohash=randomize_infohash,
                 exclude_regexs=[self.tracker.exclude_regex],
             )
 

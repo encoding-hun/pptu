@@ -35,6 +35,8 @@ if TYPE_CHECKING:
 
 
 class nekoBT(Uploader):
+    randomize_infohash = False
+
     VIDEO_CODEC_MAP: dict[str, int] = {
         "AVC": 1,  # H.264
         "HEVC": 2,  # H.265
@@ -263,6 +265,7 @@ class nekoBT(Uploader):
 
         if self.config.get(self, "watch_dir"):
             self.private = True
+            self.randomize_infohash = True
             default_t.append(
                 "https://tracker.nekobt.to/api/tracker/{passkey}/announce",
             )

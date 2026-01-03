@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
 
 class BroadcasTheNet(Uploader):
+    source = "BTN"
+
     COUNTRY_MAP: dict[str, int] = {
         "AD": 65,
         "AF": 51,
