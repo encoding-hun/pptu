@@ -362,6 +362,8 @@ class PPTU:
         ):
             eprint(f"Upload to [cyan]{self.tracker.cli.name}[/] failed.")
             return
+        else:
+            print(f"Upload to [cyan]{self.tracker.cli.name}[/] succeeded.")
 
         torrent_path: Path = (
             self.cache_dir / f"{self.path.name}[{self.tracker.cli.aliases[0]}].torrent"

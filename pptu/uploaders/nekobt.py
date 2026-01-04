@@ -590,6 +590,14 @@ class nekoBT(Uploader):
             eprint(res.get("message"), fatal=False)
             return False
 
+        info = res.get("data", {})
+
+        if site_id := info.get("id"):
+            print(
+                f"Link: https://nekobt.to/torrents/{site_id}",
+                True,
+            )
+
         return True
 
     def _get_group_info(

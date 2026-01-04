@@ -521,10 +521,10 @@ class BroadcasTheNet(Uploader):
             eprint(f"Upload failed: [cyan]{error}[/cyan]")
             return False
 
-        id = find(r'<a href="(torrents\.php\?id=\d+)">', str(r.text))
-        if id:
+        site_id = find(r'<a href="(torrents\.php\?id=\d+)">', str(r.text))
+        if site_id:
             print(
-                f"Link: https://broadcasthe.net/{id}",
+                f"Link: https://broadcasthe.net/{site_id}",
                 True,
             )
 
