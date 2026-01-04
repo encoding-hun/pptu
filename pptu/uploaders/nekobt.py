@@ -262,8 +262,6 @@ class nekoBT(Uploader):
         ]
 
         if self.config.get(self, "watch_dir"):
-            self.private = True
-            self.randomize_infohash = True
             default_t.append(
                 "https://tracker.nekobt.to/api/tracker/{passkey}/announce",
             )
