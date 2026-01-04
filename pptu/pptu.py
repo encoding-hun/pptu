@@ -116,7 +116,7 @@ class PPTU:
             torrent = Torrent(
                 self.path,
                 trackers=announce_url,
-                private=self.tracker.private,
+                private=True if self.tracker.private else None,
                 source=self.tracker.source,
                 created_by=None,
                 creation_date=None,
@@ -135,7 +135,7 @@ class PPTU:
                     torrent.trackers = announce_url
                     torrent.randomize_infohash = True
                     torrent.source = self.tracker.source
-                    torrent.private = self.tracker.private
+                    torrent.private = True if self.tracker.private else None
                     torrent.write(self.torrent_path)
             else:
                 print()
@@ -255,7 +255,7 @@ class PPTU:
         elif self.path.is_file():
             files = [self.path]
 
-        num_snapshots = self.num_snapshots
+        num_snapshots = self.num_snapshots + 1
         if self.tracker.all_files and self.path.is_dir():
             num_snapshots = len(files)
 
@@ -288,7 +288,7 @@ class PPTU:
                         eprint("File has no audio tracks")
                         return []
                     duration = float(mediainfo_obj.video_tracks[0].duration) / 1000
-                    interval = duration / (num_snapshots + 1)
+                    interval = duration / (num_snapshots + 2)
 
                     j = i
                     if last_file != files[i]:
@@ -336,7 +336,10 @@ class PPTU:
                         oxipng.optimize(snap)
                     snapshots.append(snap)
 
-        return snapshots
+        # try to prevent black images
+        min_image = min(snapshots, key=lambda p: p.stat().st_size)
+
+        return [x for x in snapshots if x != min_image]
 
     def prepare(self, mediainfo: str | list[str] | None, snapshots: list[Path]) -> bool:
         if not self.tracker.prepare(

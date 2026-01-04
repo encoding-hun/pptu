@@ -11,7 +11,7 @@ from beaupy import select_multiple
 from guessit import guessit
 from langcodes import Language
 from pymediainfo import MediaInfo
-from rich import print
+from rich import print as rprint
 from rich.prompt import Prompt
 from rich.status import Status
 from rich.tree import Tree
@@ -26,7 +26,7 @@ from pptu.utils.anilist import (
 from pptu.utils.click import comma_separated_param
 from pptu.utils.collections import first_or_else
 from pptu.utils.image import ImgUploader
-from pptu.utils.log import eprint, wprint
+from pptu.utils.log import eprint, print, wprint
 from pptu.utils.regex import find
 
 
@@ -247,14 +247,12 @@ class nekoBT(Uploader):
         self.hidden: bool = args.hidden
         self.anonymous: bool = args.anonymous
 
-        self.data: dict[str, Any] = {}
-
         if not self.video_type:
             eprint("Missing video type!\n", fatal=False)
             categories = Tree("[chartreuse2]Available video type:[white /not bold]")
             for x, y in reversed(self.VIDEO_TYPE_MAP.items()):
                 categories.add(f"[{y}] [cornflower_blue not bold]{x}[white /not bold]")
-            print(categories)
+            rprint(categories)
             sys.exit(1)
 
     @property
@@ -414,9 +412,9 @@ class nekoBT(Uploader):
             with Status(f"[bold magenta]Parsing {files[0]}...") as _:
                 mediainfo_data: MediaInfo = MediaInfo.parse(files[0], full=True)
                 if not mediainfo_data:
-                    eprint("MediaInfo parsing failed.", exit_code=1)
+                    eprint("MediaInfo parsing failed.", exit_code=1, fatal=True)
         except KeyboardInterrupt:
-            eprint("Mediainfo parse stopped", exit_code=1)
+            eprint("Mediainfo parse stopped", exit_code=1, fatal=True)
 
         if video := first_or_else(mediainfo_data.video_tracks, None):
             v_codec = self.VIDEO_CODEC_MAP.get(video.format, 0)
