@@ -77,6 +77,7 @@ class nekoBT(Uploader):
         "tg": "fil",
         "nb": "no",
         "nn": "no",
+        "ar-SA": "ar",
     }
 
     @staticmethod
