@@ -473,8 +473,7 @@ class nekoBT(Uploader):
             if len(subtitles_langs) > 1:
                 name_plus.append("Multi-Subs")
 
-        columns = self.config.get(self, "snapshot_columns", 3)
-        rows = self.config.get(self, "snapshot_rows", 2)
+        rows = self.config.get(self, "snapshot_rows", 3)
 
         if note:
             description = f">{note}\n\n<br><hr><br>\n"
@@ -488,8 +487,8 @@ class nekoBT(Uploader):
                 if image:
                     url = f"https://i.kek.sh/{image['filename']}"
                     description += f"| [![]({url})]({url}) "
-                    if i == columns:
-                        description += f"\n{'|---' * columns}|\n"
+                    if i == rows:
+                        description += f"\n{'|---' * rows}|\n"
                     elif i % rows == 0:
                         description += "\n"
 
@@ -522,40 +521,6 @@ class nekoBT(Uploader):
             "mediainfo": mediainfo,
             "ignore_warnings": self.ignore_warnings,
         }
-
-        res = self.session.put(
-            url="https://nekobt.to/api/v1/upload/checks",
-            cookies={"ssid": self.config.get(self, "api_key", "")},
-            json={
-                "title": self.data["title"],
-                "movie": self.data["movie"],
-                "video_type": self.data["video_type"],
-                "video_codec": self.data["video_codec"],
-                "files": [{"name": x.name} for x in files],
-                "level": self.data["level"],
-                "mtl": self.data["mtl"],
-                "otl": self.data["otl"],
-                "hardsub": self.data["hardsub"],
-                "audio_langs": self.data["audio_langs"],
-                "sub_langs": self.data["sub_langs"],
-                "fansub_langs": self.data["fansub_langs"],
-                "announce_urls": self.announce_url,
-            },
-        ).json()
-
-        if res.get("error"):
-            eprint(res.get("message"), fatal=False)
-            return False
-
-        info = res.get("data", {})
-
-        if warns := info.get("warns", []):
-            for warn in warns:
-                wprint(f"Warning from {self.cli.name}: {warn}")
-
-        if fails := info.get("fails", []):
-            for fail in fails:
-                eprint(f"Fail from {self.cli.name}: {fail}", fatal=False)
 
         return True
 
