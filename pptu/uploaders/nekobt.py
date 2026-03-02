@@ -90,6 +90,13 @@ class nekoBT(Uploader):
     @cloup.option_group(
         "Release Metadata",
         cloup.option(
+            "-b",
+            "--batch",
+            is_flag=True,
+            default=False,
+            help="This is a batch torrent, it has all episodes of a whole season.",
+        ),
+        cloup.option(
             "-m",
             "--movie",
             is_flag=True,
@@ -125,7 +132,7 @@ class nekoBT(Uploader):
         cloup.option(
             "-sl",
             "--sub-level",
-            type=cloup.Choice(["-1", "0", "1", "2", "3", "4"]),
+            type=cloup.Choice(["-1", "0", "1", "2", "3"]),
             metavar="LEVEL",
             default="0",
             help="Set subtitle level (-1 = no subs). Default: 0.",
@@ -229,6 +236,7 @@ class nekoBT(Uploader):
         self.private = False
 
         self.movie: bool = args.movie
+        self.batch: bool = args.batch
         self.video_type: int | None = args.video_type
         self.link: str = args.link
         self.no_plus_info: bool = args.no_plus_info
@@ -500,6 +508,7 @@ class nekoBT(Uploader):
             "torrent": base64.b64encode(torrent_path.read_bytes()).decode(),
             "title": self._format_display_name(path.stem, name_plus, group_name),
             "movie": self.movie,
+            "batch": self.batch,
             "category": "1",  # TODO: for now only one category
             "video_codec": v_codec,
             "hidden": self.hidden,
