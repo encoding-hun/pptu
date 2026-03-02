@@ -903,7 +903,7 @@ wheels = [
 
 [[package]]
 name = "pptu"
-version = "2025.12.31"
+version = "2026.3.2"
 source = { editable = "." }
 dependencies = [
     { name = "beaupy" },
