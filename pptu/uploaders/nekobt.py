@@ -78,7 +78,6 @@ class nekoBT(Uploader):
         "nb": "no",
         "nn": "no",
         "ar-SA": "ar",
-        "zh-CN": "zh",
     }
 
     @staticmethod
