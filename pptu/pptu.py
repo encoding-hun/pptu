@@ -92,20 +92,21 @@ class PPTU:
         )
 
         if self.torrent_path.exists():
-            return True
+            try:
+                time = self.path.stat().st_mtime
+                if self.path.is_dir():
+                    time = min(x.stat().st_mtime for x in self.path.iterdir())
+                if self.torrent_path.stat().st_mtime < time:
+                    wprint("Source was possible updated, creating new torrent file.")
+                    if base_torrent_path:
+                        base_torrent_path.unlink()
+                    self.torrent_path.unlink()
+                else:
+                    return True
+            except Exception:
+                pass
 
-        piece_size = 2**18
-
-        if self.path.is_file():
-            total_bytes = self.path.stat().st_size
-        else:
-            total_bytes = sum(
-                f.stat().st_size for f in self.path.rglob("*") if f.is_file()
-            )
-
-        target_pieces = 1500
-        exponent = max(18, min(24, round(math.log2(total_bytes / target_pieces))))
-        piece_size = 2**exponent
+            return False
 
         if isinstance(self.tracker.randomize_infohash, bool):
             randomize_infohash = self.tracker.randomize_infohash
@@ -113,6 +114,19 @@ class PPTU:
             randomize_infohash = not self.tracker.source
 
         if torrent_creator == "torf":
+            piece_size = 2**18
+
+            if self.path.is_file():
+                total_bytes = self.path.stat().st_size
+            else:
+                total_bytes = sum(
+                    f.stat().st_size for f in self.path.rglob("*") if f.is_file()
+                )
+
+            target_pieces = 1500
+            exponent = max(18, min(24, round(math.log2(total_bytes / target_pieces))))
+            piece_size = 2**exponent
+
             torrent = Torrent(
                 self.path,
                 trackers=announce_url,
