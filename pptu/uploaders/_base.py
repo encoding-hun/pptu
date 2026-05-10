@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import cloup
 import niquests
 from niquests.adapters import HTTPAdapter
-from urllib3_future.util.retry import Retry
+from niquests.packages.urllib3 import Retry
 
 from pptu.utils.config import Config
 from pptu.utils.log import eprint

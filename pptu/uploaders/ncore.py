@@ -161,11 +161,11 @@ class nCore(Uploader):
         auto: bool,
     ) -> bool:
         type_: str = ""
-        urls = list()
-        self.databse_urls = list()
+        urls: list[str] = []
+        self.databse_urls: list[str] = []
         imdb_id: str | None = None
-        release_name = path.stem if path.is_file() else path.name
-        gi: dict = guessit(path.name)
+        release_name: str = path.stem if path.is_file() else path.name
+        gi = guessit(path.name)
         self.client = httpx.Client(
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
@@ -194,7 +194,7 @@ class nCore(Uploader):
                 urls = self._extract_nfo_urls(
                     Path(self.nfo_file).read_text(encoding="CP437", errors="ignore")
                 )
-                imdb_id: str | None = None
+                imdb_id = None
                 imdb_url = next((x for x in urls if "imdb.com" in x), None)
                 if imdb_url:
                     imdb_id = find(r"title/tt(\d+)", imdb_url)
@@ -204,10 +204,10 @@ class nCore(Uploader):
                     f.write(mediainfo)
 
         if not imdb_id:
-            if (m := re.search(r"(.+?)\.S\d+(?:E\d+|\.)", path.name)) or (
-                m := re.search(r"(.+?\.\d{4})\.", path.name)
+            if (m := find(r"(.+?)\.S\d+(?:E\d+|\.)", path.name)) or (
+                m := find(r"(.+?\.\d{4})\.", path.name)
             ):
-                title = re.sub(r" (\d{4})$", r" (\1)", m.group(1).replace(".", " "))
+                title = re.sub(r" (\d{4})$", r" (\1)", m.replace(".", " "))
                 if (imdb_results := imdb_search(title)) and (
                     imdb_result_first := first_or_else(imdb_results, {})
                 ):
@@ -228,7 +228,8 @@ class nCore(Uploader):
         print(f"IMDb ID: [bold cyan]{imdb_id}[/]")
 
         self.imdb_ajax_data = self.session.get(
-            url=f"https://ncore.pro/ajax.php?action=imdb_movie&imdb_movie={imdb_id.lstrip('t')}",
+            url="https://ncore.pro/ajax.php",
+            params={"action": "imdb_movie", "imdb_movie": imdb_id.lstrip("tT")},
         ).text
 
         if path.is_dir():
@@ -301,7 +302,7 @@ class nCore(Uploader):
                 thumbnails_str += f"[url={snap}][img]{thumb}[/img][/url]"
                 if i + 1 % self.config.get(self, "snapshot_columns", 3) == 0:
                     thumbnails_str += "\n"
-            thumbnails_str += "[i] (Kattints a képekre a teljes felbontásban való megtekintéshez.)[/i][/center][/spoiler]"
+            thumbnails_str += "\n[i] (Kattints a képekre a teljes felbontásban való megtekintéshez.)[/i][/center][/spoiler]"
 
         description = f"{thumbnails_str or ''}"
         hun_name: str = ""
@@ -496,8 +497,9 @@ class nCore(Uploader):
 
         if not mafab_link:
             try:
-                mafab_site: dict = self.client.get(
-                    url=f"https://www.mafab.hu/js/autocomplete.php?v=20&term={gi['title'].replace(' ', '+')}",
+                mafab_site = self.client.get(
+                    url="https://www.mafab.hu/js/autocomplete.php",
+                    params={"v": "20", "term": gi["title"].replace(" ", "+")},
                     headers={
                         "X-Requested-With": "XMLHttpRequest",
                     },
@@ -530,7 +532,7 @@ class nCore(Uploader):
         self, imdb: str, gi: dict, urls: list, auto: bool
     ) -> dict[str, str | list[str]]:
         """
-        If NFO contains a Mafab link, it returns that. Otherwise, it tries to find the movie on Port.hu and returns the link.
+        If NFO contains a Port link, it returns that. Otherwise, it tries to find the movie on Port.hu and returns the link.
         """
         urls.append("")
         port_link = (
@@ -542,7 +544,8 @@ class nCore(Uploader):
         if not port_link:
             try:
                 port_site: dict = niquests.get(
-                    url=f"https://port.hu/search/suggest-list?q={gi['title'].replace(' ', '+')}",
+                    url="https://port.hu/search/suggest-list",
+                    params={"q": gi["title"].replace(" ", "+")},
                 ).json()
                 for x in port_site:
                     if (site := niquests.get("https://port.hu" + x["url"]).text) and str(
