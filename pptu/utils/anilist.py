@@ -35,7 +35,8 @@ def get_anilist_title(
         return None
 
     if not anilist_data:
-        raise ValueError("No anilist_data")
+        wprint("Failed to get anilist data")
+        return None
 
     title: dict[str, str] = anilist_data.get("title", {})
     if non_english and title.get("english"):
