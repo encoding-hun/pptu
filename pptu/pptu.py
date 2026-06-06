@@ -31,7 +31,6 @@ from pptu.utils.io import which
 from pptu.utils.log import eprint, print, wprint
 from pptu.utils.progress import CustomTransferSpeedColumn
 
-
 if TYPE_CHECKING:
     from pptu.uploaders import Uploader
 
@@ -357,10 +356,10 @@ class PPTU:
 
     def prepare(self, mediainfo: str | list[str] | None, snapshots: list[Path]) -> bool:
         if not self.tracker.prepare(
-            self.path,
-            self.torrent_path,
-            mediainfo,
-            snapshots,
+            path=self.path,
+            torrent_path=self.torrent_path,
+            mediainfo=mediainfo,
+            snapshots=snapshots,
             note=self.note,
             auto=self.auto,
         ):
@@ -370,10 +369,10 @@ class PPTU:
 
     def upload(self, mediainfo: str | list[str] | None, snapshots: list[Path]) -> None:
         if not self.tracker.upload(
-            self.path,
-            self.torrent_path,
-            mediainfo,
-            snapshots,
+            path=self.path,
+            torrent_path=self.torrent_path,
+            mediainfo=mediainfo,
+            snapshots=snapshots,
             note=self.note,
             auto=self.auto,
         ):

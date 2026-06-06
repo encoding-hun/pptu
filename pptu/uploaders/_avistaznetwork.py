@@ -28,7 +28,6 @@ from pptu.uploaders import Uploader
 from pptu.utils.log import eprint, print, wprint
 from pptu.utils.xml import load_html
 
-
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -262,18 +261,19 @@ class AvistaZNetwork(Uploader, ABC):
             soup = load_html(res)
             if not (el := soup.select_one(".current_pid")):
                 return None
-            return el.text
+            return str(el.text)
         return None
 
-    def prepare(  # type: ignore[override]
+    def prepare(
         self,
         path: Path,
         torrent_path: Path,
-        mediainfo: str,
+        mediainfo: str | list[str] | None,
         snapshots: list[Path],
-        *,
         note: str | None,
         auto: bool,
+        *_: Any,
+        **__: Any,
     ) -> bool:
         if re.search(r"\.S\d+(E\d+)+\.", str(path)):
             print("Detected episode")
@@ -505,15 +505,16 @@ class AvistaZNetwork(Uploader, ABC):
 
         return True
 
-    def upload(  # type: ignore[override]
+    def upload(
         self,
-        path: Path,
-        torrent_path: Path,
-        mediainfo: str,
-        snapshots: list[Path],
-        *,
-        note: str | None,
-        auto: bool,
+        path: Path,  # noqa: ARG002
+        torrent_path: Path,  # noqa: ARG002
+        mediainfo: str | list[str] | None,  # noqa: ARG002
+        snapshots: list[Path],  # noqa: ARG002
+        note: str | None,  # noqa: ARG002
+        auto: bool,  # noqa: ARG002
+        *_: Any,
+        **__: Any,
     ) -> bool:
         r = self.session.post(url=self.upload_url, data=self.data, timeout=60)
         soup = load_html(str(r.text))

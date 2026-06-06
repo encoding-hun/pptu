@@ -8,7 +8,7 @@ import cloup
 from ordered_set import OrderedSet
 
 
-def comma_separated_param(ctx, param, value) -> list[str] | str:
+def comma_separated_param(_, __, value) -> list[str] | str:
     if isinstance(value, list):
         return value
     if not value:

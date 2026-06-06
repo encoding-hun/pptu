@@ -6,7 +6,6 @@ import humanize
 from rich.progress import ProgressColumn
 from rich.text import Text
 
-
 if TYPE_CHECKING:
     from rich.progress import Task
 

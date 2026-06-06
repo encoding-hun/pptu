@@ -2,17 +2,10 @@
 #  See https://pre-commit.com/hooks.html for more hooks
 
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.10
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.11.19
     hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
-
-  - repo: https://github.com/pycqa/isort
-    rev: 7.0.0
-    hooks:
-      - id: isort
+      - id: uv-lock
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -23,6 +16,7 @@ repos:
         name: pre-commit-hooks/check-executables-have-shebangs
       - id: check-json
         name: pre-commit-hooks/check-json
+        exclude: ^\.vscode/launch\.json$
       - id: check-merge-conflict
         name: pre-commit-hooks/check-merge-conflict
         args: [--assume-in-merge]
@@ -49,38 +43,19 @@ repos:
         name: pre-commit-hooks/trailing-whitespace
         args: [--markdown-linebreak-ext=md]
 
-  - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.2
-    hooks:
-      - id: pyupgrade
-        args: [--py310-plus, --keep-runtime-typing]
-
   - repo: https://github.com/jendrikseipp/vulture
-    rev: v2.14
+    rev: v2.16
     hooks:
       - id: vulture
 
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.37.1
+    rev: v1.38.0
     hooks:
       - id: yamllint
 
-  - repo: https://github.com/asottile/yesqa
-    rev: v1.5.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.16
     hooks:
-      - id: yesqa
-        name: yesqa
-
-#  - repo: local
-#    hooks:
-#      - id: ty
-#        name: ty
-#        entry: uv run ty check .
-#        language: system
-#        types: [python]
-#        pass_filenames: false
-
-#  - repo: https://github.com/NSPC911/ty-pre-commit
-#    rev: v0.0.8
-#    hooks:
-#      - id: ty-check
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format

@@ -9,7 +9,6 @@ import toml
 from pptu.utils.click import CaseInsensitiveDict
 from pptu.utils.log import eprint
 
-
 if TYPE_CHECKING:
     from pptu.uploaders import Uploader
 

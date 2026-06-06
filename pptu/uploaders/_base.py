@@ -13,7 +13,6 @@ from niquests.packages.urllib3 import Retry
 from pptu.utils.config import Config
 from pptu.utils.log import eprint
 
-
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -97,6 +96,7 @@ class Uploader(ABC):
         return None
 
     def login(self, *, args: Any = None) -> bool:
+        _ = args
         if not self.session.cookies:
             eprint(f"No cookies found for {self.cli.aliases[0]}, cannot log in.")
             return False
@@ -110,9 +110,10 @@ class Uploader(ABC):
         torrent_path: Path,
         mediainfo: str | list[str] | None,
         snapshots: list[Path],
-        *,
         note: str | None,
         auto: bool,
+        *_: Any,
+        **__: Any,
     ) -> bool:
         """
         Do any necessary preparations for the upload.
@@ -126,8 +127,9 @@ class Uploader(ABC):
         torrent_path: Path,
         mediainfo: str | list[str] | None,
         snapshots: list[Path],
-        *,
         note: str | None,
         auto: bool,
+        *_: Any,
+        **__: Any,
     ) -> bool:
         """Perform the actual upload."""

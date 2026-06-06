@@ -18,7 +18,6 @@ from pptu.utils.log import eprint, print, wprint
 from pptu.utils.regex import find
 from pptu.utils.xml import load_html
 
-
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -71,7 +70,7 @@ class PassThePopcorn(Uploader):
         help="Content type.",
     )
     @cloup.pass_context
-    def cli(ctx: cloup.Context, **kwargs: Any) -> PassThePopcorn:
+    def cli(ctx: cloup.Context, /, **kwargs: Any) -> PassThePopcorn:
         return PassThePopcorn(ctx, SimpleNamespace(**kwargs))
 
     def __init__(self, ctx: cloup.Context, args: Any) -> None:
@@ -173,15 +172,16 @@ class PassThePopcorn(Uploader):
         self.anti_csrf_token = res["AntiCsrfToken"]
         return True
 
-    def prepare(  # type: ignore[override]
+    def prepare(
         self,
         path: Path,
-        torrent_path: Path,
-        mediainfo: list[str],
+        torrent_path: Path,  # noqa: ARG002
+        mediainfo: str | list[str] | None,
         snapshots: list[Path],
-        *,
         note: str | None,
         auto: bool,
+        *_: Any,
+        **__: Any,
     ) -> bool:
         imdb_url = None
         try:
@@ -278,41 +278,45 @@ class PassThePopcorn(Uploader):
         ) and all(not x.language.startswith("en") for x in mediainfo_obj.text_tracks)
         any_sub = any(x for x in mediainfo_obj.text_tracks)
 
-        snapshot_urls = []
         uploader = ImgUploader(self)
-        for snap in uploader.upload(snapshots):
-            snapshot_urls.append(f"https://ptpimg.me/{snap[0]['code']}.{snap[0]['ext']}")
+        snapshot_urls = uploader.upload(snapshots)
 
         desc = ""
         if not self.type:
             if re.search(r"\.S\d+\.", str(path)):
                 print("Detected series")
                 type_ = "Miniseries"
-                for i in range(len(mediainfo)):
-                    desc += "[mi]\n{mediainfo}\n[/mi]\n{snapshots}\n\n".format(
-                        mediainfo=mediainfo[i],
-                        snapshots=snapshot_urls[i],
-                    )
+                if isinstance(mediainfo, list):
+                    for i in range(len(mediainfo)):
+                        desc += f"[mi]\n{mediainfo[i]}\n[/mi]\n{snapshot_urls[i]}\n\n"
             else:
                 # TODO: Detect other types
                 print("Detected movie")
                 type_ = "Feature Film"
+                mi = (
+                    mediainfo[0]
+                    if isinstance(mediainfo, list) and mediainfo
+                    else mediainfo
+                )
                 desc = "[mi]\n{mediainfo}\n[/mi]\n{snapshots}".format(
-                    mediainfo=mediainfo[0],
+                    mediainfo=mi,
                     snapshots="\n".join(snapshot_urls),
                 )
         else:
             print(f"Selected type: {self.type}")
             type_ = self.type
             if type_ in ("Movie Collection", "Miniseries"):
-                for i in range(len(mediainfo)):
-                    desc += "[mi]\n{mediainfo}\n[/mi]\n{snapshots}\n\n".format(
-                        mediainfo=mediainfo[i],
-                        snapshots=snapshot_urls[i],
-                    )
+                if isinstance(mediainfo, list):
+                    for i in range(len(mediainfo)):
+                        desc += f"[mi]\n{mediainfo[i]}\n[/mi]\n{snapshot_urls[i]}\n\n"
             else:
+                mi = (
+                    mediainfo[0]
+                    if isinstance(mediainfo, list) and mediainfo
+                    else mediainfo
+                )
                 desc = "[mi]\n{mediainfo}\n[/mi]\n{snapshots}".format(
-                    mediainfo=mediainfo[0],
+                    mediainfo=mi,
                     snapshots="\n".join(snapshot_urls),
                 )
 
@@ -376,15 +380,16 @@ class PassThePopcorn(Uploader):
 
         return True
 
-    def upload(  # type: ignore[override]
+    def upload(
         self,
-        path: Path,
+        path: Path,  # noqa: ARG002
         torrent_path: Path,
-        mediainfo: list[str],
-        snapshots: list[str],
-        *,
-        note: str | None,
-        auto: bool,
+        mediainfo: str | list[str] | None,  # noqa: ARG002
+        snapshots: list[Path],  # noqa: ARG002
+        note: str | None,  # noqa: ARG002
+        auto: bool,  # noqa: ARG002
+        *_: Any,
+        **__: Any,
     ) -> bool:
         r = self.session.post(
             url="https://passthepopcorn.me/upload.php",

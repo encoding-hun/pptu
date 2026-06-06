@@ -19,7 +19,6 @@ from wand.image import Image
 
 from pptu.utils.log import eprint, print, wprint
 
-
 if TYPE_CHECKING:
     from pptu.uploaders import Uploader
 
@@ -30,9 +29,7 @@ class ImgUploader:
         self.uploader = tracker.config.get(tracker, "img_uploader")
         self.api_key = tracker.config.get("default", f"{self.uploader}_api_key", None)
 
-    def hdbimg(
-        self, files: list[Path], thumbnail_width: int, name: str
-    ) -> list[Any | None] | None:
+    def hdbimg(self, files: list[Path], thumbnail_width: int, name: str) -> list[Any]:
         if self.tracker.cli.name != "HDBits":
             eprint("HDBImg uploader can only be used for HDBits!")
             return []
@@ -56,16 +53,18 @@ class ImgUploader:
                 },
                 timeout=60,
             )
-        res = r.text
-        if res.startswith("error"):
-            error = re.sub(r"^error: ", "", res)
-            eprint(f"Snapshot upload failed: [cyan]{error}[/cyan]")
-            return []
+        if res := r.text:
+            if res.startswith("error"):
+                error = re.sub(r"^error: ", "", res)
+                eprint(f"Snapshot upload failed: [cyan]{error}[/cyan]")
+                return []
 
-        return res.split()
+            return res.split()
 
-    def keksh(self, files: list[Path]) -> list[dict[Any, Any] | None] | None:
-        res = []
+        return []
+
+    def keksh(self, files: list[Path]) -> list[Any]:
+        res: list[Any] = []
         headers = {}
 
         if not files:
@@ -82,7 +81,7 @@ class ImgUploader:
             TimeRemainingColumn(elapsed_when_finished=True),
         ) as progress:
             for snap in progress.track(files, description="Uploading snapshots"):
-                with open(snap, "rb") as fd:
+                with snap.open("rb") as fd:
                     r = self.tracker.session.post(
                         url="https://kek.sh/api/v1/posts",
                         headers=headers,
@@ -94,10 +93,10 @@ class ImgUploader:
                     r.raise_for_status()
                     res.append(r.json())
 
-        return res
+        return [f"https://i.kek.sh/{x['filename']}" for x in res]
 
-    def ptpimg(self, files: list[Path]) -> list[dict[Any, Any] | None] | None:
-        res = []
+    def ptpimg(self, files: list[Path]) -> list[Any]:
+        res: list[Any] = []
 
         if not files:
             return res
@@ -110,7 +109,7 @@ class ImgUploader:
             TimeRemainingColumn(elapsed_when_finished=True),
         ) as progress:
             for snap in progress.track(files, description="Uploading snapshots"):
-                with open(snap, "rb") as fd:
+                with snap.open("rb") as fd:
                     r = self.tracker.session.post(
                         url="https://ptpimg.me/upload.php",
                         files={
@@ -127,14 +126,14 @@ class ImgUploader:
                     r.raise_for_status()
                     res.append(r.json())
 
-        return res
+        return [f"https://ptpimg.me/{x[0]['code']}.{x[0]['ext']}" for x in res]
 
     def upload(
         self,
         files: list[Path],
         thumbnail_width: int | None = None,
         name: str | None = None,
-    ) -> list[dict[Any, Any] | None] | None:
+    ) -> list[Any]:
         if self.uploader == "keksh":
             return self.keksh(files)
         elif self.uploader == "ptpimg":
@@ -147,7 +146,7 @@ class ImgUploader:
             else:
                 wprint("Set Img uploader doesn't exist!")
 
-            return []
+        return []
 
 
 def generate_thumbnails(

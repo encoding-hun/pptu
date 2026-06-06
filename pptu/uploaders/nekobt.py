@@ -29,7 +29,6 @@ from pptu.utils.image import ImgUploader
 from pptu.utils.log import eprint, print, wprint
 from pptu.utils.regex import find
 
-
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -226,7 +225,7 @@ class nekoBT(Uploader):
         ),
     )
     @cloup.pass_context
-    def cli(ctx: cloup.Context, **kwargs: Any) -> nekoBT:
+    def cli(ctx: cloup.Context, /, **kwargs: Any) -> nekoBT:
         return nekoBT(ctx, SimpleNamespace(**kwargs))
 
     def __init__(self, ctx: cloup.Context, args: Any) -> None:
@@ -303,15 +302,16 @@ class nekoBT(Uploader):
 
         return None
 
-    def prepare(  # type: ignore[override]
+    def prepare(
         self,
         path: Path,
         torrent_path: Path,
-        mediainfo: str,
+        mediainfo: str | list[str] | None,
         snapshots: list[Path],
-        *,
         note: str | None,
         auto: bool,
+        *_: Any,
+        **__: Any,
     ) -> bool:
         description: str = ""
         v_codec: int = 0
@@ -324,10 +324,11 @@ class nekoBT(Uploader):
         else:
             files = [path]
 
-        if not (group_name := self.primary_group):
-            if not (group_name := self.config.get(self, "group_tag", "")):
-                gi = guessit(path.name)
-                group_name = gi.get("release_group")
+        if not (group_name := self.primary_group) and not (
+            group_name := self.config.get(self, "group_tag", "")
+        ):
+            gi = guessit(path.name)
+            group_name = gi.get("release_group")
 
         primary_group_info: Any = self._get_group_info(group_name)
         members_from_primary_group: list[dict[str, Any]] = primary_group_info.get(
@@ -360,38 +361,37 @@ class nekoBT(Uploader):
                     }
                 )
 
-        if not auto:
-            if not self.primary_group_members:
-                options = []
-                for member in members_from_primary_group:
-                    options.append(
-                        f"{member['display_name']} [[grey100]{member['id']}[/grey100]]"
-                    )
+        if not auto and not self.primary_group_members:
+            options = []
+            for member in members_from_primary_group:
+                options.append(
+                    f"{member['display_name']} [[grey100]{member['id']}[/grey100]]"
+                )
 
-                try:
-                    selected_indices = select_multiple(
-                        options,
-                        return_indices=True,
-                        pagination=True,
-                        page_size=10,
-                        tick_style="grey100",
-                        cursor_style="blue",
-                    )
-                except KeyboardInterrupt:
-                    selected_indices = []
-                    wprint("Selection cancelled by user.")
+            try:
+                selected_indices = select_multiple(
+                    options,
+                    return_indices=True,
+                    pagination=True,
+                    page_size=10,
+                    tick_style="grey100",
+                    cursor_style="blue",
+                )
+            except KeyboardInterrupt:
+                selected_indices = []
+                wprint("Selection cancelled by user.")
 
-                if selected_indices:
-                    for num, member in enumerate(members_from_primary_group):
-                        role = Prompt.ask(f"Role for {member['display_name']}")
-                        if num in selected_indices:
-                            primary_group_members.append(
-                                {
-                                    "id": member["id"],
-                                    "display_name": member["display_name"],
-                                    "role": role,
-                                }
-                            )
+            if selected_indices:
+                for num, member in enumerate(members_from_primary_group):
+                    role = Prompt.ask(f"Role for {member['display_name']}")
+                    if num in selected_indices:
+                        primary_group_members.append(
+                            {
+                                "id": member["id"],
+                                "display_name": member["display_name"],
+                                "role": role,
+                            }
+                        )
 
         for secondary_group in self.secondary_groups:
             role = ""
@@ -416,7 +416,7 @@ class nekoBT(Uploader):
             )
 
         try:
-            with Status(f"[bold magenta]Parsing {files[0]}...") as _:
+            with Status(f"[bold magenta]Parsing {files[0]}..."):
                 mediainfo_data: MediaInfo = MediaInfo.parse(files[0], full=True)
                 if not mediainfo_data:
                     eprint("MediaInfo parsing failed.", exit_code=1, fatal=True)
@@ -493,16 +493,18 @@ class nekoBT(Uploader):
         if images := uploader.upload(snapshots):
             for i, image in enumerate(images, start=1):
                 if image:
-                    url = f"https://i.kek.sh/{image['filename']}"
-                    description += f"| [![]({url})]({url}) "
+                    description += f"| [![]({image})]({image}) "
                     if i == rows:
                         description += f"\n{'|---' * rows}|\n"
                     elif i % rows == 0:
                         description += "\n"
 
-        if auto:
-            if not self.video_type and re.search(r"\bweb-dl?\b", str(path), flags=re.I):
-                self.video_type = 9
+        if (
+            auto
+            and not self.video_type
+            and re.search(r"\bweb-dl?\b", str(path), flags=re.I)
+        ):
+            self.video_type = 9
 
         self.data = {
             "torrent": base64.b64encode(torrent_path.read_bytes()).decode(),
@@ -533,15 +535,16 @@ class nekoBT(Uploader):
 
         return True
 
-    def upload(  # type: ignore[override]
+    def upload(
         self,
-        path: Path,
-        torrent_path: Path,
-        mediainfo: str,
-        snapshots: list[Path],
-        *,
-        note: str | None,
-        auto: bool,
+        path: Path,  # noqa: ARG002
+        torrent_path: Path,  # noqa: ARG002
+        mediainfo: str | list[str] | None,  # noqa: ARG002
+        snapshots: list[Path],  # noqa: ARG002
+        note: str | None,  # noqa: ARG002
+        auto: bool,  # noqa: ARG002
+        *_: Any,
+        **__: Any,
     ) -> bool:
         res = self.session.post(
             url="https://nekobt.to/api/v1/upload",

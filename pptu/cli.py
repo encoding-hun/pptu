@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import contextlib
 import sys
 import time
 from pathlib import Path
@@ -19,7 +20,6 @@ from pptu.uploaders import Uploader
 from pptu.utils.click import AliasedGroup, CaseInsensitiveSection
 from pptu.utils.config import Config
 from pptu.utils.log import eprint, print, wprint
-
 
 CONTEXT_SETTINGS = Context.settings(
     help_option_names=["-h", "--help"],
@@ -108,7 +108,7 @@ CONTEXT_SETTINGS = Context.settings(
     help="Show the list of supported trackers and exit.",
 )
 @cloup.pass_context
-def main(ctx: cloup.Context, **kwargs: Any) -> None:
+def main(ctx: cloup.Context, /, **kwargs: Any) -> None:
     args = SimpleNamespace(**kwargs)
     if len(sys.argv) == 1:
         if getattr(sys, "frozen", False):
@@ -142,7 +142,7 @@ def main(ctx: cloup.Context, **kwargs: Any) -> None:
 
 @main.result_callback()
 @cloup.pass_context
-def result(ctx: cloup.Context, trackers: list[Uploader], **kwargs: Any) -> None:
+def result(ctx: cloup.Context, /, trackers: list[Uploader], **kwargs: Any) -> None:
     args = SimpleNamespace(**kwargs)
 
     for tracker in trackers:
@@ -156,14 +156,12 @@ def result(ctx: cloup.Context, trackers: list[Uploader], **kwargs: Any) -> None:
             tracker.cookie_jar.set_cookie(cookie)
         tracker.cookies_path.parent.mkdir(parents=True, exist_ok=True)
         # prevent corrupted cookies file
-        try:
+        with contextlib.suppress(PermissionError):
             tracker.cookies_path.unlink(missing_ok=True)
-        except PermissionError:
-            pass
 
         tracker.cookie_jar.save(ignore_discard=True)
 
-    jobs: list[tuple[PPTU, str | list[str] | None, list[Path]]] = list()
+    jobs: list[tuple[PPTU, str | list[str] | None, list[Path]]] = []
 
     fast_upload = args.fast_upload or (
         ctx.obj.config.get("default", "fast_upload", False)

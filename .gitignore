@@ -110,3 +110,10 @@ venv.bak/
 # Project-specific
 cookies
 config.yml
+.aider*
+
+# ruff
+.ruff_cache
+
+# AI shit
+.antigravitycli

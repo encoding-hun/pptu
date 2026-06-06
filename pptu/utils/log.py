@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from typing import Any, IO, Literal, NoReturn, overload
+from typing import IO, Any, Literal, NoReturn, overload
 
 from rich.console import Console
 

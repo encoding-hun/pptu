@@ -5,7 +5,6 @@ from pathlib import Path
 from pptu.uploaders._base import Uploader  # noqa: F401
 from pptu.utils import pluralize
 
-
 # Load all services
 failed_uploader: list[str] = []
 successful_uploader: list[str] = []

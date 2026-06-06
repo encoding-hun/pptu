@@ -52,7 +52,7 @@ class nCore(Uploader):
         help="Request ID to fulfill a request.",
     )
     @cloup.pass_context
-    def cli(ctx: cloup.Context, **kwargs: Any) -> nCore:
+    def cli(ctx: cloup.Context, /, **kwargs: Any) -> nCore:
         return nCore(ctx, SimpleNamespace(**kwargs))
 
     def __init__(self, ctx: cloup.Context, args: Any) -> None:
@@ -76,11 +76,12 @@ class nCore(Uploader):
 
     @property
     def passkey(self) -> str | None:
-        if res := self.session.get("https://ncore.pro/torrents.php").text:
-            if m := find(
+        if (res := self.session.get("https://ncore.pro/torrents.php").text) and (
+            m := find(
                 r'<link rel="alternate" href="/rss.php\?key=([a-f0-9]+)" title', res
-            ):
-                return m
+            )
+        ):
+            return m
         return None
 
     def login(self, *, args: Any = None) -> bool:
@@ -147,18 +148,16 @@ class nCore(Uploader):
 
         return True
 
-    def prepare(  # type: ignore[override]
-        # In the `prepare` and `upload` methods of the `nCoreUploader` class, `self` refers to the
-        # instance of the class itself, while `path` is a parameter that represents the file path of
-        # the media file being prepared or uploaded.
+    def prepare(
         self,
         path: Path,
-        torrent_path: Path,
-        mediainfo: str,
+        torrent_path: Path,  # noqa: ARG002
+        mediainfo: str | list[str] | None,
         snapshots: list[Path],
-        *,
         note: str | None,
         auto: bool,
+        *_: Any,
+        **__: Any,
     ) -> bool:
         type_: str = ""
         urls: list[str] = []
@@ -201,17 +200,21 @@ class nCore(Uploader):
             else:
                 self.nfo_file = Path(path / f"{release_name}.nfo")
                 with self.nfo_file.open("w", encoding="ascii") as f:
-                    f.write(mediainfo)
+                    if isinstance(mediainfo, list):
+                        f.write("\n\n".join(mediainfo))
+                    elif isinstance(mediainfo, str):
+                        f.write(mediainfo)
 
-        if not imdb_id:
-            if (m := find(r"(.+?)\.S\d+(?:E\d+|\.)", path.name)) or (
-                m := find(r"(.+?\.\d{4})\.", path.name)
+        if (
+            not imdb_id
+            and (m := find(r"(.+?)\.S\d+(?:E\d+|\.)", path.name))
+            or (m := find(r"(.+?\.\d{4})\.", path.name))
+        ):
+            title = re.sub(r" (\d{4})$", r" (\1)", m.replace(".", " "))
+            if (imdb_results := imdb_search(title)) and (
+                imdb_result_first := first_or_else(imdb_results, {})
             ):
-                title = re.sub(r" (\d{4})$", r" (\1)", m.replace(".", " "))
-                if (imdb_results := imdb_search(title)) and (
-                    imdb_result_first := first_or_else(imdb_results, {})
-                ):
-                    imdb_id = imdb_result_first.get("id")
+                imdb_id = imdb_result_first.get("id")
 
         if not imdb_id:
             if auto:
@@ -237,7 +240,7 @@ class nCore(Uploader):
         else:
             file = path
 
-        with Status("[bold magenta]Parsing for info scraping...") as _:
+        with Status("[bold magenta]Parsing for info scraping..."):
             m_info_temp: str = MediaInfo.parse(file, output="JSON", full=True)
             if m_info_temp:
                 mediainfo_: dict = orjson.loads(m_info_temp)["media"]["track"]
@@ -246,10 +249,7 @@ class nCore(Uploader):
 
         video = first_or_none(x for x in mediainfo_ if x["@type"] == "Video")
         if size := (gi.get("screen_size") or video and video["Height"]):
-            if int(size.strip("ip")) < 720:
-                type_ = "xvid" + type_
-            else:
-                type_ = "hd" + type_
+            type_ = ("xvid" if int(size.strip("ip")) < 720 else "hd") + type_
         else:
             print("Unable to determine video resolution.")
             return False
@@ -312,14 +312,18 @@ class nCore(Uploader):
             description = f"[quote]{note}[/quote]\n\n{description}"
         if config := self.config.get(self, "description"):
             if config == "mafab" or config is True:
-                mafab: dict = self._mafab_scraper(imdb_id, gi, urls, auto)
-                if (link := mafab.get("link")) and (info := mafab.get("info")):
+                mafab: dict[str, str | list[str]] = self._mafab_scraper(
+                    imdb_id, gi, urls, auto
+                )
+                if (link := mafab.get("link", "")) and (info := mafab.get("info")):
                     description = f"[url={link}]Mafab.hu[/url]: {info}\n\n{description}"
                     database = link
                 hun_name = mafab.get("name", "")
                 year = mafab.get("year", "")
             elif config == "port" or config is True and "mafab" not in description:
-                port: dict = self._port_scraper(imdb_id, gi, urls, auto)
+                port: dict[str, str | list[str]] = self._port_scraper(
+                    imdb_id, gi, urls, auto
+                )
                 if (link := port.get("link")) and (info := port.get("info")):
                     description = f"[url={link}]PORT.hu[/url]: {info}\n\n{description}"
                     database = link
@@ -370,45 +374,49 @@ class nCore(Uploader):
 
         return True
 
-    def upload(  # type: ignore[override]
+    def upload(
         self,
-        path: Path,
+        path: Path,  # noqa: ARG002
         torrent_path: Path,
-        mediainfo: str,
+        mediainfo: str | list[str] | None,  # noqa: ARG002
         snapshots: list[Path],
-        *,
-        note: str | None,
-        auto: bool,
+        note: str | None,  # noqa: ARG002
+        auto: bool,  # noqa: ARG002
+        *_: Any,
+        **__: Any,
     ) -> bool:
+        files: dict[str, Any] = {
+            "torrent_fajl": (
+                str(torrent_path),
+                torrent_path.open("rb"),
+                "application/x-bittorrent",
+            ),
+            "kep1": (
+                str(snapshots[-3]),
+                snapshots[-3].open("rb"),
+                f"image/{snapshots[-3].suffix.lstrip('.')}",
+            ),
+            "kep2": (
+                str(snapshots[-2]),
+                snapshots[-2].open("rb"),
+                f"image/{snapshots[-2].suffix.lstrip('.')}",
+            ),
+            "kep3": (
+                str(snapshots[-1]),
+                snapshots[-1].open("rb"),
+                f"image/{snapshots[-1].suffix.lstrip('.')}",
+            ),
+        }
+        if self.nfo_file:
+            files["nfo_fajl"] = (
+                str(self.nfo_file),
+                self.nfo_file.open("rb"),
+                "application/octet-stream",
+            )
+
         r = self.session.post(
             url="https://ncore.pro/upload.php",
-            files={
-                "torrent_fajl": (
-                    str(torrent_path),
-                    torrent_path.open("rb"),
-                    "application/x-bittorrent",
-                ),
-                "nfo_fajl": (
-                    str(self.nfo_file),
-                    self.nfo_file.open("rb"),
-                    "application/octet-stream",
-                ),
-                "kep1": (
-                    str(snapshots[-3]),
-                    snapshots[-3].open("rb"),
-                    f"image/{snapshots[-3].suffix.lstrip('.')}",
-                ),
-                "kep2": (
-                    str(snapshots[-2]),
-                    snapshots[-2].open("rb"),
-                    f"image/{snapshots[-2].suffix.lstrip('.')}",
-                ),
-                "kep3": (
-                    str(snapshots[-1]),
-                    snapshots[-1].open("rb"),
-                    f"image/{snapshots[-1].suffix.lstrip('.')}",
-                ),
-            },
+            files=files,
             data=self.data,
         )
 
@@ -431,12 +439,17 @@ class nCore(Uploader):
         This method sends a GET request to https://ncore.pro/ and extracts a unique ID from the response.
         The ID is returned as a string.
         """
-        data = self.session.get(url="https://ncore.pro/").text
-        id = find(r'<a href="exit.php\?q=(.*)" id="menu_11" class="menu_link">', data)
+        data = self.session.get(url="https://ncore.pro/").text or ""
+        unique_id = find(
+            r'<a href="exit.php\?q=(.*)" id="menu_11" class="menu_link">', data
+        )
 
-        return id if id else ""
+        return unique_id or ""
 
     def _link_shortener(self, url: str | None) -> str | None:
+        if not url:
+            return url
+
         url = url.replace("www.", "").replace("http://", "https://")
 
         if not url.startswith("https://"):
@@ -492,8 +505,8 @@ class nCore(Uploader):
         """
         urls.append("")
         mafab_link = first_or_none(x for x in urls if "mafab.hu" in x) or ""
-        from_sec: bool = True if mafab_link else False
-        data = dict()
+        from_sec: bool = bool(mafab_link)
+        data = {}
 
         if not mafab_link:
             try:
@@ -505,11 +518,14 @@ class nCore(Uploader):
                     },
                 ).json()
                 for x in mafab_site:
-                    if x["cat"] == "movie":
-                        if (site := self.client.get(x["id"]).text) and str(imdb) in site:
-                            mafab_link = x["id"]
-                            data = self._mafab_data_scraper(site, mafab_link) or {}
-                            break
+                    if (
+                        x["cat"] == "movie"
+                        and (site := self.client.get(x["id"]).text)
+                        and str(imdb) in site
+                    ):
+                        mafab_link = x["id"]
+                        data = self._mafab_data_scraper(site, mafab_link) or {}
+                        break
             except Exception as e:
                 wprint(f"error: {e}.")
 
@@ -538,8 +554,8 @@ class nCore(Uploader):
         port_link = (
             first_or_none(x for x in urls if "port.hu" in x and "/-/" not in x) or ""
         )
-        from_sec: bool = True if port_link else False
-        data = dict()
+        from_sec: bool = bool(port_link)
+        data = {}
 
         if not port_link:
             try:
@@ -576,7 +592,7 @@ class nCore(Uploader):
         """
         Extracts the description of a movie from Mafab.hu.
         """
-        return_data = dict()
+        return_data = {}
 
         soup = load_html(site)
         name = soup.find("meta", itemprop="name")
@@ -588,12 +604,12 @@ class nCore(Uploader):
         if info and (info_ := info.find("p") or info.find("span")):
             return_data["info"] = info_.text.strip()
         if link and not return_data.get("description"):
-            id: str = link.split("-")[-1].rstrip(".html")
+            movie_id: str = link.split("-")[-1].rstrip(".html")
             res = self.client.post(
                 url="https://www.mafab.hu/includes/jquery/movies_ajax.php",
                 data={
                     "request": "official_bio",
-                    "movie_id": id,
+                    "movie_id": movie_id,
                 },
                 headers={
                     "x-requested-with": "XMLHttpRequest",
@@ -621,7 +637,7 @@ class nCore(Uploader):
         """
         Extracts the description of a movie from Port.hu.
         """
-        return_data = dict()
+        return_data = {}
         soup = load_html(site)
         script = soup.find("script", type="application/ld+json")
         if script and (info_ := orjson.loads(script.string)):

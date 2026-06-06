@@ -18,7 +18,6 @@ from pptu.utils.log import eprint, print, wprint
 from pptu.utils.regex import find
 from pptu.utils.xml import load_html
 
-
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -140,10 +139,10 @@ class BroadcasTheNet(Uploader):
         help=__doc__,
     )
     @cloup.pass_context
-    def cli(ctx: cloup.Context, **kwargs: Any) -> BroadcasTheNet:
+    def cli(ctx: cloup.Context, /, **kwargs: Any) -> BroadcasTheNet:
         return BroadcasTheNet(ctx, SimpleNamespace(**kwargs))
 
-    def __init__(self, ctx: cloup.Context, args: Any) -> None:
+    def __init__(self, ctx: cloup.Context, *_: Any, **__: Any) -> None:
         super().__init__(ctx)
 
     @property
@@ -160,7 +159,7 @@ class BroadcasTheNet(Uploader):
             soup = load_html(res)
             if not (el := soup.select_one("input[value$='/announce']")):
                 return None
-            return el.attrs["value"].split("/")[-2]
+            return str(el.attrs["value"].split("/")[-2])
         return None
 
     def login(self, *, args: Any = None) -> bool:
@@ -223,15 +222,16 @@ class BroadcasTheNet(Uploader):
 
         return "login.php" not in str(r.url)
 
-    def prepare(  # type: ignore[override]
+    def prepare(
         self,
         path: Path,
-        torrent_path: Path,
-        mediainfo: str,
+        torrent_path: Path,  # noqa: ARG002
+        mediainfo: str | list[str] | None,
         snapshots: list[Path],
-        *,
         note: str | None,
         auto: bool,
+        *_: Any,
+        **__: Any,
     ) -> bool:
         if re.search(r"\.S\d+(E\d+|\.Special)+\.", str(path)):
             print("Detected episode")
@@ -351,13 +351,7 @@ class BroadcasTheNet(Uploader):
 
         thumbnails_str = ""
         uploader = ImgUploader(self)
-        snapshot_urls = []
-        for snapshot in uploader.upload(snapshots):
-            snapshot_urls.append(
-                f"https://i.kek.sh/{snapshot['filename']}"
-                if snapshot.get("filename")
-                else ""
-            )
+        snapshot_urls = uploader.upload(snapshots)
 
         if snapshot_urls:
             thumbnail_row_width = min(
@@ -492,15 +486,16 @@ class BroadcasTheNet(Uploader):
 
         return True
 
-    def upload(  # type: ignore[override]
+    def upload(
         self,
-        path: Path,
+        path: Path,  # noqa: ARG002
         torrent_path: Path,
-        mediainfo: str,
-        snapshots: list[Path],
-        *,
-        note: str | None,
-        auto: bool,
+        mediainfo: str | list[str] | None,  # noqa: ARG002
+        snapshots: list[Path],  # noqa: ARG002
+        note: str | None,  # noqa: ARG002
+        auto: bool,  # noqa: ARG002
+        *_: Any,
+        **__: Any,
     ) -> bool:
         r = self.session.post(
             url="https://backup.landof.tv/upload.php",

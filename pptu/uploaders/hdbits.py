@@ -18,7 +18,6 @@ from pptu.utils.imdb import imdb_search
 from pptu.utils.log import eprint, print, wprint
 from pptu.utils.xml import load_html
 
-
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -106,10 +105,10 @@ class HDBits(Uploader):
         help=__doc__,
     )
     @cloup.pass_context
-    def cli(ctx: cloup.Context, **kwargs: Any) -> HDBits:
+    def cli(ctx: cloup.Context, /, **kwargs: Any) -> HDBits:
         return HDBits(ctx, SimpleNamespace(**kwargs))
 
-    def __init__(self, ctx: cloup.Context, args: Any) -> None:
+    def __init__(self, ctx: cloup.Context, *_: Any, **__: Any) -> None:
         super().__init__(ctx)
 
     @property
@@ -122,9 +121,10 @@ class HDBits(Uploader):
 
     @property
     def passkey(self) -> str | None:
-        if res := self.session.get("https://hdbits.org/").text:
-            if m := re.search(r"passkey=([a-f0-9]+)", res):
-                return m.group(1)
+        if (res := self.session.get("https://hdbits.org/").text) and (
+            m := re.search(r"passkey=([a-f0-9]+)", res)
+        ):
+            return m.group(1)
         return None
 
     def login(self, *, args: Any = None) -> bool:
@@ -139,15 +139,16 @@ class HDBits(Uploader):
         ).json()
         correct_hash = None
         for image in captcha["images"]:
-            if r := self.session.get(
-                "https://hdbits.org/simpleCaptcha.php", params={"hash": image}
-            ).content:
-                if self.CAPTCHA_MAP.get(hashlib.sha256(r).hexdigest()) == captcha["text"]:
-                    correct_hash = image
-                    print(
-                        f"Found captcha solution: [bold cyan]{captcha['text']}[/] ([cyan]{correct_hash}[/])"
-                    )
-                    break
+            if (
+                r := self.session.get(
+                    "https://hdbits.org/simpleCaptcha.php", params={"hash": image}
+                ).content
+            ) and self.CAPTCHA_MAP.get(hashlib.sha256(r).hexdigest()) == captcha["text"]:
+                correct_hash = image
+                print(
+                    f"Found captcha solution: [bold cyan]{captcha['text']}[/] ([cyan]{correct_hash}[/])"
+                )
+                break
         if not correct_hash:
             eprint("Unable to solve captcha, perhaps it has new images?")
             return False
@@ -195,9 +196,9 @@ class HDBits(Uploader):
 
         if "error" in str(r.url):
             soup = load_html(str(r.text))
-            if el := soup.find("td", {"class": "text"}):
-                error = re.sub(r"\s+", " ", el.text).strip()
-            elif el := soup.select_one("embedded"):
+            if (el := soup.find("td", {"class": "text"})) or (
+                el := soup.select_one("embedded")
+            ):
                 error = re.sub(r"\s+", " ", el.text).strip()
             else:
                 error = "Unknown error"
@@ -207,15 +208,16 @@ class HDBits(Uploader):
 
         return True
 
-    def prepare(  # type: ignore[override]
+    def prepare(
         self,
         path: Path,
-        torrent_path: Path,
-        mediainfo: str,
+        torrent_path: Path,  # noqa: ARG002
+        mediainfo: str | list[str] | None,
         snapshots: list[Path],
-        *,
         note: str | None,
         auto: bool,
+        *_: Any,
+        **__: Any,
     ) -> bool:
         if re.search(r"\.S\d+(E\d+)*\.", str(path)):
             print("Detected series")
@@ -378,15 +380,16 @@ class HDBits(Uploader):
 
         return True
 
-    def upload(  # type: ignore[override]
+    def upload(
         self,
-        path: Path,
+        path: Path,  # noqa: ARG002
         torrent_path: Path,
-        mediainfo: str,
-        snapshots: list[Path],
-        *,
-        note: str | None,
-        auto: bool,
+        mediainfo: str | list[str] | None,  # noqa: ARG002
+        snapshots: list[Path],  # noqa: ARG002
+        note: str | None,  # noqa: ARG002
+        auto: bool,  # noqa: ARG002
+        *_: Any,
+        **__: Any,
     ) -> bool:
         res = self.session.post(
             url="https://hdbits.org/upload/upload",

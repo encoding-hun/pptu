@@ -6,7 +6,6 @@ import httpx
 
 from pptu.utils import dict_to_json
 
-
 random = SystemRandom()
 
 
