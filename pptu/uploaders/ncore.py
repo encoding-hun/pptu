@@ -155,7 +155,6 @@ class nCore(Uploader):
         mediainfo: str | list[str] | None,
         snapshots: list[Path],
         note: str | None,
-        auto: bool,
         *_: Any,
         **__: Any,
     ) -> bool:
@@ -217,7 +216,7 @@ class nCore(Uploader):
                 imdb_id = imdb_result_first.get("id")
 
         if not imdb_id:
-            if auto:
+            if self.auto:
                 eprint("No IMDb ID specified in config")
                 return False
             imdb_id = Prompt.ask("Enter IMDb ID: ")
@@ -312,18 +311,14 @@ class nCore(Uploader):
             description = f"[quote]{note}[/quote]\n\n{description}"
         if config := self.config.get(self, "description"):
             if config == "mafab" or config is True:
-                mafab: dict[str, str | list[str]] = self._mafab_scraper(
-                    imdb_id, gi, urls, auto
-                )
+                mafab: dict[str, str | list[str]] = self._mafab_scraper(imdb_id, gi, urls)
                 if (link := mafab.get("link", "")) and (info := mafab.get("info")):
                     description = f"[url={link}]Mafab.hu[/url]: {info}\n\n{description}"
                     database = link
                 hun_name = mafab.get("name", "")
                 year = mafab.get("year", "")
             elif config == "port" or config is True and "mafab" not in description:
-                port: dict[str, str | list[str]] = self._port_scraper(
-                    imdb_id, gi, urls, auto
-                )
+                port: dict[str, str | list[str]] = self._port_scraper(imdb_id, gi, urls)
                 if (link := port.get("link")) and (info := port.get("info")):
                     description = f"[url={link}]PORT.hu[/url]: {info}\n\n{description}"
                     database = link
@@ -381,7 +376,6 @@ class nCore(Uploader):
         mediainfo: str | list[str] | None,  # noqa: ARG002
         snapshots: list[Path],
         note: str | None,  # noqa: ARG002
-        auto: bool,  # noqa: ARG002
         *_: Any,
         **__: Any,
     ) -> bool:
@@ -498,7 +492,7 @@ class nCore(Uploader):
         return self.databse_urls
 
     def _mafab_scraper(
-        self, imdb: str, gi: dict, urls: list, auto: bool
+        self, imdb: str, gi: dict, urls: list
     ) -> dict[str, str | list[str]]:
         """
         If NFO contains a Mafab link, it returns that. Otherwise, it tries to find the movie on Mafab.hu and returns the link.
@@ -531,7 +525,7 @@ class nCore(Uploader):
 
         if not mafab_link:
             wprint("Mafab.hu scraping failed.")
-            if not auto:
+            if not self.auto:
                 mafab_link = Prompt.ask("Mafab.hu link")
             from_sec = True
         else:
@@ -545,7 +539,7 @@ class nCore(Uploader):
         return {"link": mafab_link, **data}
 
     def _port_scraper(
-        self, imdb: str, gi: dict, urls: list, auto: bool
+        self, imdb: str, gi: dict, urls: list
     ) -> dict[str, str | list[str]]:
         """
         If NFO contains a Port link, it returns that. Otherwise, it tries to find the movie on Port.hu and returns the link.
@@ -578,7 +572,7 @@ class nCore(Uploader):
 
         if not port_link:
             wprint("PORT.hu scraping failed.")
-            if not auto:
+            if not self.auto:
                 port_link = Prompt.ask("PORT.hu link")
             from_sec = True
         else:

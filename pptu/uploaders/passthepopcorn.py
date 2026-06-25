@@ -179,7 +179,6 @@ class PassThePopcorn(Uploader):
         mediainfo: str | list[str] | None,
         snapshots: list[Path],
         note: str | None,
-        auto: bool,
         *_: Any,
         **__: Any,
     ) -> bool:
@@ -201,7 +200,7 @@ class PassThePopcorn(Uploader):
         except Exception as e:
             wprint(f"IMDb got error {str(e)}")
         if not imdb_url:
-            if auto:
+            if self.auto:
                 eprint("Unable to get IMDb URL")
                 return False
             imdb_url = Prompt.ask("Enter IMDb URL")
@@ -387,7 +386,6 @@ class PassThePopcorn(Uploader):
         mediainfo: str | list[str] | None,  # noqa: ARG002
         snapshots: list[Path],  # noqa: ARG002
         note: str | None,  # noqa: ARG002
-        auto: bool,  # noqa: ARG002
         *_: Any,
         **__: Any,
     ) -> bool:

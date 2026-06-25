@@ -215,7 +215,6 @@ class HDBits(Uploader):
         mediainfo: str | list[str] | None,
         snapshots: list[Path],
         note: str | None,
-        auto: bool,
         *_: Any,
         **__: Any,
     ) -> bool:
@@ -254,7 +253,7 @@ class HDBits(Uploader):
                 if res2 := r.json():
                     tvdb = next(iter(res2.keys()))
             if not tvdb:
-                if auto:
+                if self.auto:
                     eprint("Unable to get TVDB ID")
                 tvdb = Prompt.ask("Enter TVDB ID")
 
@@ -387,7 +386,6 @@ class HDBits(Uploader):
         mediainfo: str | list[str] | None,  # noqa: ARG002
         snapshots: list[Path],  # noqa: ARG002
         note: str | None,  # noqa: ARG002
-        auto: bool,  # noqa: ARG002
         *_: Any,
         **__: Any,
     ) -> bool:

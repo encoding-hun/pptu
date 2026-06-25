@@ -271,7 +271,6 @@ class AvistaZNetwork(Uploader, ABC):
         mediainfo: str | list[str] | None,
         snapshots: list[Path],
         note: str | None,
-        auto: bool,
         *_: Any,
         **__: Any,
     ) -> bool:
@@ -341,7 +340,7 @@ class AvistaZNetwork(Uploader, ABC):
                 )
             except StopIteration:
                 err = "Title not found on site, please add it manually and try again."
-                if auto:
+                if self.auto:
                     eprint(err)
                     return False
                 else:
@@ -360,7 +359,7 @@ class AvistaZNetwork(Uploader, ABC):
             "movie_id": movie_id,
             "media_info": mediainfo,
         }
-        if not auto:
+        if not self.auto:
             print(data, highlight=True)
 
         url = f"{self.base_url}/upload/{'movie' if collection == 'movie' else 'tv'}"
@@ -512,7 +511,6 @@ class AvistaZNetwork(Uploader, ABC):
         mediainfo: str | list[str] | None,  # noqa: ARG002
         snapshots: list[Path],  # noqa: ARG002
         note: str | None,  # noqa: ARG002
-        auto: bool,  # noqa: ARG002
         *_: Any,
         **__: Any,
     ) -> bool:

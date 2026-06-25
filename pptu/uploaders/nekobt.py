@@ -255,7 +255,7 @@ class nekoBT(Uploader):
         self.hidden: bool = args.hidden
         self.anonymous: bool = args.anonymous
 
-        if not self.video_type:
+        if not self.video_type and not self.auto:
             eprint("Missing video type!\n", fatal=False)
             categories = Tree("[chartreuse2]Available video type:[white /not bold]")
             for x, y in reversed(self.VIDEO_TYPE_MAP.items()):
@@ -309,7 +309,6 @@ class nekoBT(Uploader):
         mediainfo: str | list[str] | None,
         snapshots: list[Path],
         note: str | None,
-        auto: bool,
         *_: Any,
         **__: Any,
     ) -> bool:
@@ -361,7 +360,7 @@ class nekoBT(Uploader):
                     }
                 )
 
-        if not auto and not self.primary_group_members:
+        if not self.auto and not self.primary_group_members:
             options = []
             for member in members_from_primary_group:
                 options.append(
@@ -500,7 +499,7 @@ class nekoBT(Uploader):
                         description += "\n"
 
         if (
-            auto
+            self.auto
             and not self.video_type
             and re.search(r"\bweb-dl?\b", str(path), flags=re.I)
         ):
@@ -542,7 +541,6 @@ class nekoBT(Uploader):
         mediainfo: str | list[str] | None,  # noqa: ARG002
         snapshots: list[Path],  # noqa: ARG002
         note: str | None,  # noqa: ARG002
-        auto: bool,  # noqa: ARG002
         *_: Any,
         **__: Any,
     ) -> bool:

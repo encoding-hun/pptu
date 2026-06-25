@@ -4,7 +4,6 @@ import glob
 import math
 import random
 import re
-import shutil
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -47,9 +46,11 @@ class PPTU:
         dirs: PlatformDirs,
     ):
         self.path: Path = path
-        self.tracker = tracker
+        self.tracker: Uploader = tracker
         self.note: str | None = note
         self.auto: bool = auto
+
+        self.tracker.auto = auto
 
         self.cache_dir: Path = dirs.user_cache_path / f"{path.name}_files"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -361,7 +362,6 @@ class PPTU:
             mediainfo=mediainfo,
             snapshots=snapshots,
             note=self.note,
-            auto=self.auto,
         ):
             eprint(f"Preparing upload to [cyan]{self.tracker.cli.name}[/] failed.")
             return False
@@ -374,23 +374,20 @@ class PPTU:
             mediainfo=mediainfo,
             snapshots=snapshots,
             note=self.note,
-            auto=self.auto,
         ):
             eprint(f"Upload to [cyan]{self.tracker.cli.name}[/] failed.")
             return
         else:
             print(f"Upload to [cyan]{self.tracker.cli.name}[/] succeeded.")
 
-        torrent_path: Path = (
-            self.cache_dir / f"{self.path.name}[{self.tracker.cli.aliases[0]}].torrent"
-        )
         if watch_dir := self.config.get(self.tracker, "watch_dir"):
             watch_dir = Path(watch_dir).expanduser()
-            metafile = Metafile.from_file(torrent_path)
-            metafile.add_fast_resume(self.path)
-            resume_path = Path(str(torrent_path).replace(".torrent", "-resume.torrent"))
-            metafile.save(resume_path)
-            shutil.copy(resume_path, watch_dir)
+            try:
+                metafile = Metafile.from_file(self.torrent_path)
+                metafile.add_fast_resume(self.path)
+                metafile.save(watch_dir / self.torrent_path.name)
+            except Exception as e:
+                wprint(f"Failed to save fast-resume torrent to watch directory: {e}")
 
     def __str__(self) -> str:
         return f"{self.tracker.cli.aliases[0]} ({self.torrent_path})"

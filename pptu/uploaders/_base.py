@@ -76,6 +76,7 @@ class Uploader(ABC):
         self.session.proxies.update({"all": self.config.get(self, "proxy")})
 
         self.data: dict[str, Any] = {}
+        self.auto = False
 
     @property
     @abstractmethod
@@ -111,7 +112,6 @@ class Uploader(ABC):
         mediainfo: str | list[str] | None,
         snapshots: list[Path],
         note: str | None,
-        auto: bool,
         *_: Any,
         **__: Any,
     ) -> bool:
@@ -128,7 +128,6 @@ class Uploader(ABC):
         mediainfo: str | list[str] | None,
         snapshots: list[Path],
         note: str | None,
-        auto: bool,
         *_: Any,
         **__: Any,
     ) -> bool:

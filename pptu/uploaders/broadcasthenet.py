@@ -229,7 +229,6 @@ class BroadcasTheNet(Uploader):
         mediainfo: str | list[str] | None,
         snapshots: list[Path],
         note: str | None,
-        auto: bool,
         *_: Any,
         **__: Any,
     ) -> bool:
@@ -297,7 +296,7 @@ class BroadcasTheNet(Uploader):
                 title = el.attrs["value"]
 
         if artist == "AutoFill Fail" or title == "AutoFill Fail":
-            if auto:
+            if self.auto:
                 eprint("AutoFill Fail.")
                 return False
             else:
@@ -333,7 +332,7 @@ class BroadcasTheNet(Uploader):
         lang = lang.fill_likely_values()
 
         if lang.territory == "419":
-            if auto:
+            if self.auto:
                 lang.territory = (
                     "ES"  # Technically Latin America but we can't guess automatically
                 )
@@ -493,7 +492,6 @@ class BroadcasTheNet(Uploader):
         mediainfo: str | list[str] | None,  # noqa: ARG002
         snapshots: list[Path],  # noqa: ARG002
         note: str | None,  # noqa: ARG002
-        auto: bool,  # noqa: ARG002
         *_: Any,
         **__: Any,
     ) -> bool:
