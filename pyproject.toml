@@ -5,7 +5,7 @@ build-backend = "uv_build"
 [project]
 name = "pptu"
 description = "Python P2P Torrent Uploader"
-version = "2026.06.06"
+version = "2026.06.25"
 authors = [{ name = "pcroland" }, { name = "varyg" }]
 requires-python = "<3.14,>=3.10"
 dependencies = [
