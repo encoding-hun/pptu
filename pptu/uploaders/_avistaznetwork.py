@@ -218,7 +218,7 @@ class AvistaZNetwork(Uploader, ABC):
         self.cookies_path.parent.mkdir(parents=True, exist_ok=True)
         self.cookie_jar.save(ignore_discard=True)
 
-        if "/auth/twofa" in res(r.url):
+        if "/auth/twofa" in str(r.url):
             print("2FA detected")
 
             soup = load_html(str(r.text))
@@ -277,11 +277,11 @@ class AvistaZNetwork(Uploader, ABC):
         if re.search(r"\.S\d+(E\d+)+\.", str(path)):
             print("Detected episode")
             collection = "episode"
+        elif re.search(r"\.S\d+-S?\d+\.", str(path)):
+            collection = "series"
         elif re.search(r"\.S\d+\.", str(path)):
             print("Detected season")
             collection = "season"
-        elif re.search(r"\.S\d+-S?\d+\.", str(path)):
-            collection = "series"
         else:
             collection = "movie"
 
@@ -321,8 +321,8 @@ class AvistaZNetwork(Uploader, ABC):
 
         # TODO: Automatically add new titles
         while True:
-            res = self.session.get(
-                url=f"{self.base_url}/ajax/movies/{'1' if collection == 'movie' else '2'}",
+            ajax_r = self.session.get(
+                url=f"{self.base_url}/ajax/search/{'1' if collection == 'movie' else '2'}",
                 params={
                     "term": title,
                 },
@@ -330,9 +330,10 @@ class AvistaZNetwork(Uploader, ABC):
                     "x-requested-with": "XMLHttpRequest",
                 },
                 timeout=60,
-            ).json()
+            )
+            ajax_r.raise_for_status()
+            res = ajax_r.json()
             print(res, highlight=True)
-            r.raise_for_status()
 
             try:
                 res = next(
@@ -383,11 +384,16 @@ class AvistaZNetwork(Uploader, ABC):
 
         if errors := soup.select(".form-error"):
             for error in errors:
-                eprint(f"[cyan]{escape(error.text)}[cyan]")
+                eprint(f"[cyan]{escape(error.text)}[/cyan]")
             return False
 
         images = []
-        snapshots = snapshots[: len(snapshots) - len(snapshots) % 3]
+        trimmed = snapshots[: len(snapshots) - len(snapshots) % 3]
+        if len(trimmed) != len(snapshots):
+            wprint(
+                f"Trimmed {len(snapshots) - len(trimmed)} snapshot(s) to align to groups of 3"
+            )
+        snapshots = trimmed
         with Progress(
             TextColumn("[progress.description]{task.description}[/]"),
             BarColumn(),
@@ -396,7 +402,7 @@ class AvistaZNetwork(Uploader, ABC):
             TimeRemainingColumn(elapsed_when_finished=True),
         ) as progress:
             for img in progress.track(snapshots, description="Uploading snapshots"):
-                res = self.session.post(
+                img_r = self.session.post(
                     url=f"{self.base_url}/ajax/image/upload",
                     data={
                         "_token": token,
@@ -411,10 +417,11 @@ class AvistaZNetwork(Uploader, ABC):
                         "x-requested-with": "XMLHttpRequest",
                     },
                     timeout=60,
-                ).json()
-                r.raise_for_status()
-                if res["error"]:
-                    wprint(f"Failed to upload image: {res['error']}")
+                )
+                img_r.raise_for_status()
+                res = img_r.json()
+                if res.get("error"):
+                    wprint(f"Failed to upload image: {res.get('error')}")
                 else:
                     images.append(res["imageId"])
 
@@ -479,7 +486,7 @@ class AvistaZNetwork(Uploader, ABC):
                 .replace("5 1 ", "5.1 ")
             ),
             "anon_upload": "1"
-            if self.anonymous_upload or self.config.get(self, "anonymous_upload", True)
+            if self.anonymous_upload or self.config.get(self, "anonymous_upload", False)
             else "",
             "description": note or "",
             "qqfile": "",

@@ -273,8 +273,10 @@ class PassThePopcorn(Uploader):
             file = path
         mediainfo_obj = MediaInfo.parse(file)
         no_eng_subs = all(
-            not x.language.startswith("en") for x in mediainfo_obj.audio_tracks
-        ) and all(not x.language.startswith("en") for x in mediainfo_obj.text_tracks)
+            not (x.language or "").startswith("en") for x in mediainfo_obj.audio_tracks
+        ) and all(
+            not (x.language or "").startswith("en") for x in mediainfo_obj.text_tracks
+        )
         any_sub = any(x for x in mediainfo_obj.text_tracks)
 
         uploader = ImgUploader(self)
@@ -287,7 +289,8 @@ class PassThePopcorn(Uploader):
                 type_ = "Miniseries"
                 if isinstance(mediainfo, list):
                     for i in range(len(mediainfo)):
-                        desc += f"[mi]\n{mediainfo[i]}\n[/mi]\n{snapshot_urls[i]}\n\n"
+                        snap_url = snapshot_urls[i] if i < len(snapshot_urls) else ""
+                        desc += f"[mi]\n{mediainfo[i]}\n[/mi]\n{snap_url}\n\n"
             else:
                 # TODO: Detect other types
                 print("Detected movie")
@@ -307,7 +310,8 @@ class PassThePopcorn(Uploader):
             if type_ in ("Movie Collection", "Miniseries"):
                 if isinstance(mediainfo, list):
                     for i in range(len(mediainfo)):
-                        desc += f"[mi]\n{mediainfo[i]}\n[/mi]\n{snapshot_urls[i]}\n\n"
+                        snap_url = snapshot_urls[i] if i < len(snapshot_urls) else ""
+                        desc += f"[mi]\n{mediainfo[i]}\n[/mi]\n{snap_url}\n\n"
             else:
                 mi = (
                     mediainfo[0]
@@ -345,7 +349,7 @@ class PassThePopcorn(Uploader):
         tag = (path.name if path.is_dir() else path.stem).split("-")[-1]
 
         remaster_title = " / ".join(
-            {v for k, v in self.EDITION_MAP.items() if re.search(k, str(path))}
+            [v for k, v in self.EDITION_MAP.items() if re.search(k, str(path))]
         )
 
         self.data = {

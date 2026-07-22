@@ -15,7 +15,7 @@ def extract_name_from_filename(file_name: str) -> tuple[str, bool]:
     gi = guessit(file_name)
     is_movie = gi.get("type") == "movie"
     if name := gi.get("title"):
-        name.replace(".", " ")[:100]
+        name = name.replace(".", " ")[:100]
     name = re.sub(r"[\.|\-]S\d+.*", "", file_name)
     if name == file_name:
         name = re.sub(r"[\.|\-]\d{4}\..*", "", file_name)
@@ -29,10 +29,10 @@ def extract_name_from_filename(file_name: str) -> tuple[str, bool]:
 def get_anilist_title(
     search_name: str = "", non_english: bool = False, anilist_data: dict | None = None
 ) -> str | None:
-    if not anilist_data and search_name:
+    if not anilist_data:
+        if not search_name:
+            return None
         anilist_data = get_anilist_data(search_name)
-    else:
-        return None
 
     if not anilist_data:
         wprint("Failed to get anilist data")
@@ -75,7 +75,7 @@ def get_anilist_data(
                     }
                 }
             """,
-            "variables": {"id": str(anilist_id)},
+            "variables": {"id": int(anilist_id)},
         }
     else:
         json_data = {

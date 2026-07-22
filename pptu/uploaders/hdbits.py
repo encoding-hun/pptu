@@ -204,7 +204,8 @@ class HDBits(Uploader):
                 error = "Unknown error"
                 if m := re.search(r"error=(\d+)", str(r.url)):
                     error += f" {m[1]}"
-            eprint(error, True)
+            eprint(error)
+            return False
 
         return True
 
@@ -277,7 +278,7 @@ class HDBits(Uploader):
                     imdb = f"https://www.imdb.com/title/{imdb_result_first.get('id')}/"
             else:
                 wprint("Unable to extract title from filename.")
-            imdb = imdb or input("Enter IMDb URL: ")
+            imdb = imdb or Prompt.ask("Enter IMDb URL")
             tvdb = None
             season = None
             episode = None
@@ -334,7 +335,7 @@ class HDBits(Uploader):
         # Strip Atmos
         name = re.sub(r"\.atmos", "", name, flags=re.IGNORECASE)
         # DV/HDR normalization
-        name = re.sub(r"HDR10(?:\+|P|Plus)", "HDR", name, flags=re.IGNORECASE)
+        name = re.sub(r"HDR10(?:P|Plus)", "HDR", name, flags=re.IGNORECASE)
         name = re.sub(r"(?:DV|DoVi)\.HDR", "DoVi", name)
         # Strip other tags
         name = name.replace(".DUBBED", "")

@@ -160,7 +160,7 @@ class nCore(Uploader):
     ) -> bool:
         type_: str = ""
         urls: list[str] = []
-        self.databse_urls: list[str] = []
+        self.database_urls: list[str] = []
         imdb_id: str | None = None
         release_name: str = path.stem if path.is_file() else path.name
         gi = guessit(path.name)
@@ -204,9 +204,8 @@ class nCore(Uploader):
                     elif isinstance(mediainfo, str):
                         f.write(mediainfo)
 
-        if (
-            not imdb_id
-            and (m := find(r"(.+?)\.S\d+(?:E\d+|\.)", path.name))
+        if not imdb_id and (
+            (m := find(r"(.+?)\.S\d+(?:E\d+|\.)", path.name))
             or (m := find(r"(.+?\.\d{4})\.", path.name))
         ):
             title = re.sub(r" (\d{4})$", r" (\1)", m.replace(".", " "))
@@ -247,8 +246,8 @@ class nCore(Uploader):
                 eprint("MediaInfo parsing failed.", exit_code=1)
 
         video = first_or_none(x for x in mediainfo_ if x["@type"] == "Video")
-        if size := (gi.get("screen_size") or video and video["Height"]):
-            type_ = ("xvid" if int(size.strip("ip")) < 720 else "hd") + type_
+        if size := (gi.get("screen_size") or video and video.get("Height")):
+            type_ = ("xvid" if int(str(size).strip("ip")) < 720 else "hd") + type_
         else:
             print("Unable to determine video resolution.")
             return False
@@ -256,7 +255,7 @@ class nCore(Uploader):
 
         audios = (x for x in mediainfo_ if x["@type"] == "Audio")
         for num, audio in enumerate(audios, 1):
-            lang = audio["Language"]
+            lang = audio.get("Language")
             if not lang:
                 eprint(f"Unable to determine {num} audio language.", exit_code=0)
                 continue
@@ -274,9 +273,7 @@ class nCore(Uploader):
             thumbnails_str += "[spoiler=Screenshots][center]"
             snapshot_urls = []
             for snap in uploader.upload(snapshots[0:-3]):
-                snapshot_urls.append(
-                    f"https://i.kek.sh/{snap['filename']}" if snap.get("filename") else ""
-                )
+                snapshot_urls.append(snap)
 
             thumbnail_row_width = min(
                 660, self.config.get(self, "snapshot_row_width", 660)
@@ -289,17 +286,13 @@ class nCore(Uploader):
                 snapshots[0:-3], width=thumbnail_width, file_type="jpg"
             )
             for thumb in uploader.upload(thumbnails):
-                thumbnail_urls.append(
-                    f"https://i.kek.sh/{thumb['filename']}"
-                    if thumb.get("filename")
-                    else ""
-                )
+                thumbnail_urls.append(thumb)
 
             for i in range(len(snapshot_urls)):
                 snap = snapshot_urls[i]
                 thumb = thumbnail_urls[i]
                 thumbnails_str += f"[url={snap}][img]{thumb}[/img][/url]"
-                if i + 1 % self.config.get(self, "snapshot_columns", 3) == 0:
+                if (i + 1) % self.config.get(self, "snapshot_columns", 3) == 0:
                     thumbnails_str += "\n"
             thumbnails_str += "\n[i] (Kattints a képekre a teljes felbontásban való megtekintéshez.)[/i][/center][/spoiler]"
 
@@ -342,7 +335,7 @@ class nCore(Uploader):
             "szoveg": description,
             "imdb_id": imdb_id,
             "film_adatbazis": self._link_shortener(
-                next(x for x in self.databse_urls + [""] if "imdb.com" not in x)
+                next(x for x in self.database_urls + [""] if "imdb.com" not in x)
                 or database
             ),
             "infobar_picture": self._ajax_parser("movie_picture"),
@@ -379,9 +372,12 @@ class nCore(Uploader):
         *_: Any,
         **__: Any,
     ) -> bool:
+        if len(snapshots) < 3:
+            eprint("At least 3 snapshots are required for nCore.")
+            return False
         files: dict[str, Any] = {
             "torrent_fajl": (
-                str(torrent_path),
+                torrent_path.name,
                 torrent_path.open("rb"),
                 "application/x-bittorrent",
             ),
@@ -417,7 +413,7 @@ class nCore(Uploader):
         if "A feltöltött torrent már létezik" in r.text:
             wprint("Torrent already exists.")
             return False
-        elif "upload.php" in r.url:
+        elif "upload.php" in str(r.url):
             return False
 
         print(
@@ -471,7 +467,7 @@ class nCore(Uploader):
         Extracts URLs from an NFO file and returns a list of URLs that belong to specific databases.
         """
         urls: list[str] = re.findall(r"https?://[^ ░▒▓█▄▌▐─│\n]+", nfo)
-        self.databse_urls = [
+        self.database_urls = [
             x
             for x in urls
             if any(
@@ -489,7 +485,7 @@ class nCore(Uploader):
             )
         ]
 
-        return self.databse_urls
+        return self.database_urls
 
     def _mafab_scraper(
         self, imdb: str, gi: dict, urls: list
@@ -562,7 +558,7 @@ class nCore(Uploader):
                         imdb
                     ) in site:
                         port_link = "https://port.hu" + x["url"]
-                        data = self._port_data_scraper(site, port_link) or {}
+                        data = self._port_data_scraper(site) or {}
                         temp = x.get("subtitle", "").split(",")
                         data["genre"] = (temp[0] or "").split(" ")
                         data["year"] = temp[-1]
@@ -578,7 +574,8 @@ class nCore(Uploader):
         else:
             print(f"PORT.hu link: {port_link}", True)
         if port_link and from_sec:
-            data = self._port_data_scraper(niquests.get(port_link).text, port_link) or {}
+            port_text = niquests.get(port_link).text
+            data = self._port_data_scraper(port_text) or {}
 
         return {"link": port_link, **data}
 
@@ -598,7 +595,7 @@ class nCore(Uploader):
         if info and (info_ := info.find("p") or info.find("span")):
             return_data["info"] = info_.text.strip()
         if link and not return_data.get("description"):
-            movie_id: str = link.split("-")[-1].rstrip(".html")
+            movie_id: str = link.split("-")[-1].removesuffix(".html")
             res = self.client.post(
                 url="https://www.mafab.hu/includes/jquery/movies_ajax.php",
                 data={

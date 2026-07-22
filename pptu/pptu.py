@@ -195,7 +195,7 @@ class PPTU:
                         "edit",
                         "--no-created-by",
                         "--no-creation-date",
-                        *([f"-a {x}" for x in announce_url]),
+                        *([arg for x in announce_url for arg in ("-a", x)]),
                         *(["-s", self.tracker.source] if self.tracker.source else []),
                         "--private",
                         ["off", "on"][self.tracker.private],
@@ -215,7 +215,7 @@ class PPTU:
                         "--no-cross-seed",
                         "--exclude",
                         r".*\.(ffindex|jpg|nfo|png|srt|torrent|txt)$",
-                        *([f"-a {x}" for x in announce_url]),
+                        *([arg for x in announce_url for arg in ("-a", x)]),
                         *(["-s", self.tracker.source] if self.tracker.source else []),
                         "--private",
                         ["off", "on"][self.tracker.private],
@@ -301,7 +301,11 @@ class PPTU:
                     if not mediainfo_obj.audio_tracks:
                         eprint("File has no audio tracks")
                         return []
-                    duration = float(mediainfo_obj.video_tracks[0].duration) / 1000
+                    raw_duration = mediainfo_obj.video_tracks[0].duration
+                    if not raw_duration:
+                        eprint("Could not determine video duration")
+                        return []
+                    duration = float(raw_duration) / 1000
                     interval = duration / (num_snapshots + 2)
 
                     j = i
@@ -350,6 +354,8 @@ class PPTU:
                         oxipng.optimize(snap)
                     snapshots.append(snap)
 
+        if not snapshots:
+            return []
         # try to prevent black images
         min_image = min(snapshots, key=lambda p: p.stat().st_size)
 

@@ -203,7 +203,7 @@ class BroadcasTheNet(Uploader):
         r.raise_for_status()
 
         if "login.php" in str(r.url):
-            if args.auto:
+            if args and args.auto:
                 eprint("No TOTP secret specified in config")
                 return False
             tfa_code = Prompt.ask("Enter 2FA code")
@@ -251,9 +251,7 @@ class BroadcasTheNet(Uploader):
         ):
             release_name = release_name.replace(m.group(), "")
             release_name = re.sub(r"\.(\d+p)", r".DV.\1", release_name)
-        elif m := re.search(
-            r"\.(?:\.HDR(?:10(?:\+|P|Plus)))\b", release_name, flags=re.I
-        ):
+        elif m := re.search(r"\.HDR(?:10(?:\+|P|Plus))?\b", release_name, flags=re.I):
             release_name = release_name.replace(m.group(), "")
             release_name = re.sub(r"\.(\d+p)", r".HDR.\1", release_name)
         elif m := re.search(r"\.HLG\b", release_name, flags=re.I):
@@ -345,7 +343,7 @@ class BroadcasTheNet(Uploader):
         # Strip episode title if name is too long
         if len(release_name) > 100:
             release_name = release_name.replace(
-                gi["episode_title"].replace(" ", "."), ""
+                gi.get("episode_title", "").replace(" ", "."), ""
             ).replace("..", ".")
 
         thumbnails_str = ""
@@ -365,20 +363,16 @@ class BroadcasTheNet(Uploader):
             )
 
             for thumb in uploader.upload(thumbnails):
-                thumbnail_urls.append(
-                    f"https://i.kek.sh/{thumb['filename']}"
-                    if thumb.get("filename")
-                    else ""
-                )
+                thumbnail_urls.append(thumb)
 
             for i in range(len(snapshots)):
-                snapshot = snapshot_urls[i]
-                thumb = thumbnail_urls[i]
+                snapshot = snapshot_urls[i] if i < len(snapshot_urls) else ""
+                thumb = thumbnail_urls[i] if i < len(thumbnail_urls) else ""
                 thumbnails_str += rf"[url={snapshot}][img]{thumb}[/img][/url]"
-                if i % self.config.get(self, "snapshot_columns", 2) == 0:
-                    thumbnails_str += " "
-                else:
+                if (i + 1) % self.config.get(self, "snapshot_columns", 2) == 0:
                     thumbnails_str += "\n"
+                else:
+                    thumbnails_str += " "
 
         series_id = None
         if el := soup.select_one("[name=seriesid]"):
@@ -500,7 +494,7 @@ class BroadcasTheNet(Uploader):
             data=self.data,
             files={
                 "file_input": (
-                    str(torrent_path),
+                    torrent_path.name,
                     torrent_path.open("rb"),
                     "application/x-bittorrent",
                 ),

@@ -65,6 +65,24 @@ class nekoBT(Uploader):
         "VHS": 1,
         "Other": 0,
     }
+    _VIDEO_TYPE_PATTERNS: list[tuple[str, int]] = [
+        # Order matters — more specific patterns first
+        (r"\bbd.?remux\b", 14),  # BD - Remux
+        (r"\bbd.?mini\b", 12),  # BD - Mini
+        (r"\bbd.?disc\b", 11),  # BD - Disc
+        (r"\bbd.?(enc(ode)?|rip)\b", 13),  # BD - Encode
+        (r"\bweb-?dl\b", 9),  # WEB-DL
+        (r"\bweb.?mini\b", 7),  # WEB - Mini
+        (r"\bweb.?(enc(ode)?|rip)\b", 8),  # WEB - Encode
+        (r"\bdvd.?remux\b", 5),  # DVD - Remux
+        (r"\bdvd.?disc\b", 16),  # DVD - Disc
+        (r"\bdvd.?(enc(ode)?|rip)\b", 6),  # DVD - Encode
+        (r"\btv.?raw\b", 4),  # TV - Raw
+        (r"\btv.?(enc(ode)?|rip)\b", 3),  # TV - Encode
+        (r"\bhybrid\b", 15),  # Hybrid
+        (r"\blaserdisc\b", 2),  # LaserDisc
+        (r"\bvhs\b", 1),  # VHS
+    ]
     LANG_CONVERT: dict[str, str] = {
         "jp": "ja",
         "eng": "en",
@@ -498,12 +516,11 @@ class nekoBT(Uploader):
                     elif i % rows == 0:
                         description += "\n"
 
-        if (
-            self.auto
-            and not self.video_type
-            and re.search(r"\bweb-dl?\b", str(path), flags=re.I)
-        ):
-            self.video_type = 9
+        if self.auto and not self.video_type:
+            for pattern, vtype in self._VIDEO_TYPE_PATTERNS:
+                if re.search(pattern, str(path), flags=re.I):
+                    self.video_type = vtype
+                    break
 
         self.data = {
             "torrent": base64.b64encode(torrent_path.read_bytes()).decode(),

@@ -13,7 +13,7 @@ def dict_to_json(data: Mapping[Any, Any]) -> str:
     return orjson.dumps(data).decode()
 
 
-def pluralize(count: int, singular: int, plural=None, include_count=True) -> str | Any:
+def pluralize(count: int, singular: str, plural=None, include_count=True) -> str | Any:
     plural = plural or f"{singular}s"
     form = singular if count == 1 else plural
     return f"{count} {form}" if include_count else form
