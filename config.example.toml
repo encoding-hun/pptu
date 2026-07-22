@@ -61,3 +61,15 @@ group_at_start = false # Put the group name inside bracket at the start
 # group_tag = "MYGRP"
 # advert = ""          # Option for group link or other message to use in all upload
 # proxy = "http://user:pass@example.com:6060"
+
+[nyaa]
+username = ""
+password = ""
+img_uploader = "keksh"
+# announce_urls = ["http://nyaa.tracker.wf:7777/announce"]
+# telegram = false
+# telegram_token = ""
+# telegram_chat_id = ""
+# trusted = false
+# advert = ""
+# proxy = "http://user:pass@example.com:6060"
