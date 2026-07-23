@@ -16,7 +16,7 @@
     <th>Name</th>
     <th>Acronym</th>
     <th>Auth</th>
-    <th>Cloudflare</th>
+    <th>Protection</th>
     <th>Captcha</th>
     <th>Server upload allowed</th>
   </tr>
@@ -27,7 +27,7 @@
     <th>BroadcasTheNet</th>
     <td align="center"><code>BTN</code></td>
     <td align="center">Credentials/<br />Cookies</td>
-    <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/274c.png" width="14" /> No</td>
+    <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/274c.png" width="14" /> None</td>
     <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/274c.png" width="14" /> No</td>
     <td><img src="https://github.githubassets.com/images/icons/emoji/unicode/26a0.png" width="14" /> Dedicated servers only, requires staff approval</td>
   </tr>
@@ -35,7 +35,7 @@
     <th>HDBits</th>
     <td align="center"><code>HDB</code></td>
     <td align="center">Credentials/<br />Cookies</td>
-    <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/2714.png" width="14" /> Yes</td>
+    <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/2714.png" width="14" /> Cloudflare</td>
     <td align="center"><img width="14" src="https://github.githubassets.com/images/icons/emoji/unicode/2714.png"> Simple</td>
     <td><img src="https://github.githubassets.com/images/icons/emoji/unicode/2714.png" width="14" /> Yes, if IP whitelisted in profile or 2FA enabled</td>
   </tr>
@@ -43,7 +43,7 @@
     <th>nCore</th>
     <td align="center"><code>nC</code></td>
     <td align="center">Credentials/<br />Cookies</td>
-    <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/274c.png" width="14" /> No</td>
+    <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/274c.png" width="14" /> None</td>
     <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/274c.png" width="14" /> No</td>
     <td><img src="https://github.githubassets.com/images/icons/emoji/unicode/2714.png" width="14" /> Yes</td>
   </tr>
@@ -51,7 +51,15 @@
     <th>nekoBT</th>
     <td align="center"><code>nBT</code></td>
     <td align="center">API key</td>
+    <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/274c.png" width="14" /> None</td>
     <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/274c.png" width="14" /> No</td>
+    <td><img src="https://github.githubassets.com/images/icons/emoji/unicode/2714.png" width="14" /> Yes</td>
+  </tr>
+  <tr>
+    <th>Nyaa</th>
+    <td align="center"><code>nyaa</code></td>
+    <td align="center">Credentials</td>
+    <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/26a0.png" width="14" /> DDoS-Guard</td>
     <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/274c.png" width="14" /> No</td>
     <td><img src="https://github.githubassets.com/images/icons/emoji/unicode/2714.png" width="14" /> Yes</td>
   </tr>
@@ -59,7 +67,7 @@
     <th>PassThePopcorn</th>
     <td align="center"><code>PTP</code></td>
     <td align="center">Credentials/<br />Cookies</td>
-    <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/274c.png" width="14" /> No</td>
+    <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/274c.png" width="14" /> None</td>
     <td align="center"><img src="https://github.githubassets.com/images/icons/emoji/unicode/274c.png" width="14" /> No</td>
     <td><img src="https://github.githubassets.com/images/icons/emoji/unicode/26a0.png" width="14" /> Dedicated servers only, requires staff approval</td>
   </tr>
@@ -70,7 +78,7 @@
     <th>AvistaZ</td>
     <td align="center"><code>AvZ</code></td>
     <td align="center" rowspan="3">Credentials/<br />Cookies</td>
-    <td align="center" rowspan="3"><img src="https://github.githubassets.com/images/icons/emoji/unicode/274c.png" width="14" /> No</td>
+    <td align="center" rowspan="3"><img src="https://github.githubassets.com/images/icons/emoji/unicode/274c.png" width="14" /> None</td>
     <td align="center" rowspan="3"><img src="https://github.githubassets.com/images/icons/emoji/unicode/2714.png" width="14" /> Yes</td>
     <td rowspan="3"><img src="https://github.githubassets.com/images/icons/emoji/unicode/2714.png" width="14" /> Yes, if IP whitelisted in profile</td>
   </tr>
@@ -137,13 +145,14 @@ Options:
    -lt, --list-trackers               Show the list of supported trackers and exit.
    -h, --help                         Show this message and exit.
 
-Uploaders (8):
+Uploaders (9):
    AvistaZ          https://avistaz.to/
    BroadcasTheNet   https://broadcasthe.net/
    CinemaZ          https://cinemaz.to/
    HDBits           https://hdbits.org/
    nCore            https://ncore.pro/
    nekoBT           https://nekobt.to/
+   Nyaa             https://nyaa.si/
    PassThePopcorn   https://passthepopcorn.me/
    PrivateHD        https://privatehd.to/
 
