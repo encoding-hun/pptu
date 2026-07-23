@@ -379,9 +379,9 @@ class Nyaa(Uploader):
                 categories_tree = Tree(
                     "[chartreuse2]Available categories:[white /not bold]"
                 )
-                for cat_id, cat_desc in enumerate(self.CATEGORIES.values(), start=1):
+                for cat_id, cat_desc in self.CATEGORIES.items():
                     categories_tree.add(
-                        f"[{cat_id}] [cornflower_blue not bold]{cat_desc}[white /not bold]"
+                        f"[{self.SHORTCUT_MAP.get(cat_id)}] [cornflower_blue not bold]{cat_desc}[white /not bold]"
                     )
                 rprint(categories_tree)
                 import sys
@@ -593,14 +593,11 @@ class Nyaa(Uploader):
         duration_val = getattr(general_track, "duration", None)
         if duration_val:
             try:
-                total_seconds = float(duration_val) / 1000
+                total_seconds = float(duration_val) / 1000.0
                 hours = int(total_seconds // 3600)
                 minutes = int((total_seconds % 3600) // 60)
-                seconds = int(total_seconds % 60)
-                if hours > 0:
-                    duration_str = f"{hours} h {minutes} min"
-                else:
-                    duration_str = f"{minutes} min {seconds} s"
+                secs = total_seconds % 60
+                duration_str = f"{hours:02d}:{minutes:02d}:{secs:06.3f}"
             except Exception:
                 duration_str = "?"
         else:
