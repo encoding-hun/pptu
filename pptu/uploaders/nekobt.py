@@ -498,8 +498,6 @@ class nekoBT(Uploader):
             if len(subtitles_langs) > 1:
                 name_plus.append("Multi-Subs")
 
-        rows = self.config.get(self, "snapshot_rows", 3)
-
         if note:
             description = f">{note}\n\n<br><hr><br>\n"
 
@@ -508,13 +506,15 @@ class nekoBT(Uploader):
 
         uploader = ImgUploader(self)
         if images := uploader.upload(snapshots):
-            for i, image in enumerate(images, start=1):
-                if image:
-                    description += f"| [![]({image})]({image}) "
-                    if i == rows:
-                        description += f"\n{'|---' * rows}|\n"
-                    elif i % rows == 0:
-                        description += "\n"
+            cols = min(self.config.get(self, "snapshot_columns", 3), len(images))
+            if cols > 0:
+                for i, image in enumerate(images, start=1):
+                    if image:
+                        description += f"| [![]({image})]({image}) "
+                        if i == min(cols, len(images)):
+                            description += f"|\n{'|---' * cols}|\n"
+                        elif i % cols == 0:
+                            description += "|\n"
 
         if self.auto and not self.video_type:
             for pattern, vtype in self._VIDEO_TYPE_PATTERNS:
