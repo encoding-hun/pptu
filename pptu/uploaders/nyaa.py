@@ -284,6 +284,8 @@ class Nyaa(Uploader):
     Based on https://github.com/varyg1001/nyaaup
     """
 
+    randomize_infohash = False
+
     CATEGORIES = {
         "1_1": "Anime - Anime Music Video",
         "1_2": "Anime - English-translated",

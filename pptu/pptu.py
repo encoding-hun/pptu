@@ -147,7 +147,7 @@ class PPTU:
                     wprint("Torrent file is invalid, recreating")
                 else:
                     torrent.trackers = announce_url
-                    torrent.randomize_infohash = True
+                    torrent.randomize_infohash = randomize_infohash
                     torrent.source = self.tracker.source
                     torrent.private = True if self.tracker.private else None
                     torrent.write(self.torrent_path)
