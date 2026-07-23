@@ -84,20 +84,30 @@ def process_video_track(track: Any) -> str:
 
     codec = ""
     if track.internet_media_type:
-        codec = track.internet_media_type.split("/")[1] + " "
+        codec = track.internet_media_type.split("/")[1].upper().replace("H264", "H264")
     elif track.format:
-        codec = track.format
+        codec = str(track.format).replace(" ", "")
 
-    level = f"**{track.format_profile}@L{track.format_level}**"
-    if "None" in level or not track.format_profile or not track.format_level:
-        level = ""
+    profile = str(track.format_profile) if track.format_profile else ""
+    level = f"L{track.format_level}" if track.format_level else ""
+
+    if profile and level:
+        level_str = f"{profile}@{level}"
+    elif profile or level:
+        level_str = f"{profile}{level}"
     else:
-        codec = codec + " "
+        level_str = ""
+
+    codec_level_part = (
+        f"**{codec} {level_str}**".strip()
+        if codec and level_str
+        else (f"**{codec}**" if codec else None)
+    )
 
     dimensions = f"**{track.width}x{track.height}**" if track.width else None
 
     parts = [
-        f"**{codec}{level}**" if codec else None,
+        codec_level_part,
         f"{dimensions}{v_bitrate}" if dimensions else None,
         f"**{track.frame_rate} fps**" if track.frame_rate else None,
     ]
@@ -283,6 +293,15 @@ class Nyaa(Uploader):
         "4_3": "Live Action - Non-English-translated",
         "4_4": "Live Action - Raw",
     }
+    SHORTCUT_MAP = {
+        "1": "1_2",
+        "2": "1_3",
+        "3": "1_4",
+        "4": "4_1",
+        "5": "4_3",
+        "6": "4_4",
+        "7": "1_1",
+    }
 
     @staticmethod
     @cloup.command(
@@ -294,24 +313,7 @@ class Nyaa(Uploader):
     @cloup.option(
         "-c",
         "--category",
-        type=cloup.Choice(
-            [
-                "1",
-                "2",
-                "3",
-                "4",
-                "5",
-                "6",
-                "7",
-                "1_1",
-                "1_2",
-                "1_3",
-                "1_4",
-                "4_1",
-                "4_3",
-                "4_4",
-            ]
-        ),
+        type=cloup.Choice(["1", "2", "3", "4", "5", "6", "7"]),
         default=None,
         help="Select category for Nyaa.si.",
     )
@@ -324,18 +326,8 @@ class Nyaa(Uploader):
 
         self.category: str = args.category
 
-        # Map shortcuts (1-7) to Nyaa categories
-        shortcut_map = {
-            "1": "1_2",
-            "2": "1_3",
-            "3": "1_4",
-            "4": "4_1",
-            "5": "4_3",
-            "6": "4_4",
-            "7": "1_1",
-        }
-        if self.category in shortcut_map:
-            self.category = shortcut_map[self.category]
+        if self.category in self.SHORTCUT_MAP:
+            self.category = self.SHORTCUT_MAP[self.category]
 
         # Tags options
         self.uncensored: bool = args.uncensored
@@ -385,7 +377,7 @@ class Nyaa(Uploader):
                 categories_tree = Tree(
                     "[chartreuse2]Available categories:[white /not bold]"
                 )
-                for cat_id, cat_desc in self.CATEGORIES.items():
+                for cat_id, cat_desc in enumerate(self.CATEGORIES.values(), start=1):
                     categories_tree.add(
                         f"[{cat_id}] [cornflower_blue not bold]{cat_desc}[white /not bold]"
                     )
@@ -649,12 +641,13 @@ class Nyaa(Uploader):
                 cols = min(
                     self.config.get(self, "snapshot_columns", 3), len(snapshot_urls)
                 )
-                for i, img_url in enumerate(snapshot_urls, start=1):
-                    description += f"| [![]({img_url})]({img_url}) "
-                    if i == cols:
-                        description += f"\n{'|---' * cols}|\n"
-                    elif i % cols == 0:
-                        description += "\n"
+                if cols > 0:
+                    for i, img_url in enumerate(snapshot_urls, start=1):
+                        description += f"| [![]({img_url})]({img_url}) "
+                        if i == min(cols, len(snapshot_urls)):
+                            description += f"|\n{'|---' * cols}|\n"
+                        elif i % cols == 0:
+                            description += "|\n"
 
         self.display_name = display_name
         self.description = description
