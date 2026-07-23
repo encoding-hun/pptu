@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
 
 class ImgUploader:
+    _CACHE: dict[tuple[str, Path, float], Any] = {}
+
     def __init__(self, tracker: Uploader):
         self.tracker = tracker
         self.uploader = tracker.config.get(tracker, "img_uploader")
@@ -34,99 +36,140 @@ class ImgUploader:
             eprint("HDBImg uploader can only be used for HDBits!")
             return []
 
-        with (
-            Console().status("Uploading snapshots..."),
-            contextlib.ExitStack() as stack,
-        ):
-            r = self.tracker.session.post(
-                url="https://img.hdbits.org/upload_api.php",
-                files={
-                    **{
-                        f"images_files[{i}]": stack.enter_context(  # type: ignore[misc]
-                            snap.open("rb")
-                        )
-                        for i, snap in enumerate(files)
+        uncached_files = []
+        for file in files:
+            key = (f"hdbimg_{thumbnail_width}_{name}", file, file.stat().st_mtime)
+            if key not in self._CACHE:
+                uncached_files.append(file)
+
+        if uncached_files:
+            with (
+                Console().status("Uploading snapshots..."),
+                contextlib.ExitStack() as stack,
+            ):
+                r = self.tracker.session.post(
+                    url="https://img.hdbits.org/upload_api.php",
+                    files={
+                        **{
+                            f"images_files[{i}]": stack.enter_context(  # type: ignore[misc]
+                                snap.open("rb")
+                            )
+                            for i, snap in enumerate(uncached_files)
+                        },
+                        "thumbsize": f"w{thumbnail_width}",
+                        "galleryoption": "1",
+                        "galleryname": name,
                     },
-                    "thumbsize": f"w{thumbnail_width}",
-                    "galleryoption": "1",
-                    "galleryname": name,
-                },
-                timeout=60,
-            )
-        if res := r.text:
-            if res.startswith("error"):
-                error = re.sub(r"^error: ", "", res)
-                eprint(f"Snapshot upload failed: [cyan]{error}[/cyan]")
-                return []
+                    timeout=60,
+                )
+            if res := r.text:
+                if res.startswith("error"):
+                    error = re.sub(r"^error: ", "", res)
+                    eprint(f"Snapshot upload failed: [cyan]{error}[/cyan]")
+                    return []
 
-            return res.split()
+                uploaded_urls = res.split()
+                for file, url in zip(uncached_files, uploaded_urls, strict=False):
+                    key = (f"hdbimg_{thumbnail_width}_{name}", file, file.stat().st_mtime)
+                    self._CACHE[key] = url
 
-        return []
+        return [
+            self._CACHE.get((f"hdbimg_{thumbnail_width}_{name}", f, f.stat().st_mtime))
+            for f in files
+            if (f"hdbimg_{thumbnail_width}_{name}", f, f.stat().st_mtime) in self._CACHE
+        ]
 
     def keksh(self, files: list[Path]) -> list[Any]:
-        res: list[Any] = []
-        headers = {}
-
         if not files:
-            return res
+            return []
 
+        headers = {}
         if self.api_key:
             headers = {"x-kek-auth": self.api_key}
 
-        with Progress(
-            TextColumn("[progress.description]{task.description}[/]"),
-            BarColumn(),
-            MofNCompleteColumn(),
-            TaskProgressColumn(),
-            TimeRemainingColumn(elapsed_when_finished=True),
-        ) as progress:
-            for snap in progress.track(files, description="Uploading snapshots"):
-                with snap.open("rb") as fd:
-                    r = self.tracker.session.post(
-                        url="https://kek.sh/api/v1/posts",
-                        headers=headers,
-                        files={
-                            "file": fd,
-                        },
-                        timeout=60,
-                    )
-                    r.raise_for_status()
-                    res.append(r.json())
+        uncached_files = []
+        for file in files:
+            key = ("keksh", file, file.stat().st_mtime)
+            if key not in self._CACHE:
+                uncached_files.append(file)
 
-        return [f"https://i.kek.sh/{x['filename']}" for x in res]
+        if uncached_files:
+            with Progress(
+                TextColumn("[progress.description]{task.description}[/]"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                TaskProgressColumn(),
+                TimeRemainingColumn(elapsed_when_finished=True),
+            ) as progress:
+                for snap in progress.track(
+                    uncached_files, description="Uploading snapshots"
+                ):
+                    with snap.open("rb") as fd:
+                        r = self.tracker.session.post(
+                            url="https://kek.sh/api/v1/posts",
+                            headers=headers,
+                            files={
+                                "file": fd,
+                            },
+                            timeout=60,
+                        )
+                        r.raise_for_status()
+                        url = f"https://i.kek.sh/{r.json()['filename']}"
+                        key = ("keksh", snap, snap.stat().st_mtime)
+                        self._CACHE[key] = url
+
+        return [
+            self._CACHE.get(("keksh", f, f.stat().st_mtime))
+            for f in files
+            if ("keksh", f, f.stat().st_mtime) in self._CACHE
+        ]
 
     def ptpimg(self, files: list[Path]) -> list[Any]:
-        res: list[Any] = []
-
         if not files:
-            return res
+            return []
 
-        with Progress(
-            TextColumn("[progress.description]{task.description}[/]"),
-            BarColumn(),
-            MofNCompleteColumn(),
-            TaskProgressColumn(),
-            TimeRemainingColumn(elapsed_when_finished=True),
-        ) as progress:
-            for snap in progress.track(files, description="Uploading snapshots"):
-                with snap.open("rb") as fd:
-                    r = self.tracker.session.post(
-                        url="https://ptpimg.me/upload.php",
-                        files={
-                            "file-upload[]": fd,
-                        },
-                        data={
-                            "api_key": self.api_key,
-                        },
-                        headers={
-                            "Referer": "https://ptpimg.me/index.php",
-                        },
-                        timeout=60,
-                    )
-                    r.raise_for_status()
-                    res.append(r.json())
+        uncached_files = []
+        for file in files:
+            key = ("ptpimg", file, file.stat().st_mtime)
+            if key not in self._CACHE:
+                uncached_files.append(file)
 
-        return [f"https://ptpimg.me/{x[0]['code']}.{x[0]['ext']}" for x in res]
+        if uncached_files:
+            with Progress(
+                TextColumn("[progress.description]{task.description}[/]"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                TaskProgressColumn(),
+                TimeRemainingColumn(elapsed_when_finished=True),
+            ) as progress:
+                for snap in progress.track(
+                    uncached_files, description="Uploading snapshots"
+                ):
+                    with snap.open("rb") as fd:
+                        r = self.tracker.session.post(
+                            url="https://ptpimg.me/upload.php",
+                            files={
+                                "file-upload[]": fd,
+                            },
+                            data={
+                                "api_key": self.api_key,
+                            },
+                            headers={
+                                "Referer": "https://ptpimg.me/index.php",
+                            },
+                            timeout=60,
+                        )
+                        r.raise_for_status()
+                        res_data = r.json()
+                        url = f"https://ptpimg.me/{res_data[0]['code']}.{res_data[0]['ext']}"
+                        key = ("ptpimg", snap, snap.stat().st_mtime)
+                        self._CACHE[key] = url
+
+        return [
+            self._CACHE.get(("ptpimg", f, f.stat().st_mtime))
+            for f in files
+            if ("ptpimg", f, f.stat().st_mtime) in self._CACHE
+        ]
 
     def upload(
         self,
