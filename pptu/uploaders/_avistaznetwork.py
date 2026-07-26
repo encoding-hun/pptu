@@ -42,8 +42,8 @@ def common_options(f):
     )
     @cloup.pass_context
     @wraps(f)
-    def wrapper(*args, **kwargs):
-        return f(*args, **kwargs)
+    def wrapper(ctx: cloup.Context, *args, **kwargs):
+        return f(ctx, *args, **kwargs)
 
     return wrapper
 
@@ -67,7 +67,9 @@ class AvistaZNetwork(Uploader, ABC):
     def __init__(self, ctx: cloup.Context, args: Any) -> None:
         super().__init__(ctx)
 
-        self.anonymous_upload: bool = args.anonymous_upload
+        self.anonymous_upload: bool = args.anonymous_upload or self.config.get(
+            self, "anonymous_upload", False
+        )
 
         self.year_in_series_name: bool = False
         self.keep_dubbed_dual_tags: bool = False
@@ -485,9 +487,7 @@ class AvistaZNetwork(Uploader, ABC):
                 .replace("2 0 ", "2.0 ")
                 .replace("5 1 ", "5.1 ")
             ),
-            "anon_upload": "1"
-            if self.anonymous_upload or self.config.get(self, "anonymous_upload", False)
-            else "",
+            "anon_upload": "1" if self.anonymous_upload else "",
             "description": note or "",
             "qqfile": "",
             "screenshots[]": images,

@@ -2,7 +2,7 @@ import json
 from secrets import SystemRandom
 from typing import Any
 
-import httpx
+import niquests
 
 from pptu.utils import dict_to_json
 
@@ -24,17 +24,14 @@ IMDB_HEAERS = {
 }
 
 
-def imdb_search(query) -> list[dict[str, Any]]:
+def imdb_search(query: str) -> list[dict[str, Any]]:
     if not query:
         raise ValueError("query is required")
     if not isinstance(query, str):
         raise TypeError("query must be a string")
 
-    with httpx.Client(
-        transport=httpx.HTTPTransport(retries=5),
-        follow_redirects=True,
-    ) as client:
-        res = client.get(
+    with niquests.Session(retries=5, disable_http3=True) as session:
+        res = session.get(
             url=f"https://v3.sg.media-imdb.com/suggestion/a/{query}.json",
             params={
                 "showOriginalTitles": "1",
@@ -71,7 +68,7 @@ def imdb_search(query) -> list[dict[str, Any]]:
     ]
 
 
-def imdb_data(title_id) -> dict[str, Any]:
+def imdb_data(title_id: str) -> dict[str, Any]:
     if not title_id:
         raise ValueError("IMDb ID is required")
     if not isinstance(title_id, str):
@@ -79,11 +76,8 @@ def imdb_data(title_id) -> dict[str, Any]:
     if not title_id.startswith("tt"):
         title_id = f"tt{title_id.lstrip('tT')}"
 
-    with httpx.Client(
-        transport=httpx.HTTPTransport(retries=5),
-        follow_redirects=True,
-    ) as client:
-        res = client.get(
+    with niquests.Session(retries=5, disable_http3=True) as session:
+        res = session.get(
             url="https://caching.graphql.imdb.com/",
             params={
                 "operationName": "TitleReduxOverviewQuery",

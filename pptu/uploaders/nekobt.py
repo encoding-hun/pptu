@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import re
 import sys
+import urllib.parse
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
@@ -20,14 +21,15 @@ from pptu.uploaders import Uploader
 from pptu.utils import is_close_match
 from pptu.utils.anilist import (
     extract_name_from_filename,
-    get_anilist_data,
-    get_anilist_title,
+    process_anilist_info,
 )
 from pptu.utils.click import comma_separated_param
 from pptu.utils.collections import first_or_else
 from pptu.utils.image import ImgUploader
 from pptu.utils.log import eprint, print, wprint
+from pptu.utils.mal import process_mal_info
 from pptu.utils.regex import find
+from pptu.utils.telegram import send_telegram_message
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -129,12 +131,19 @@ class nekoBT(Uploader):
             help="Set video type with ID. (https://wiki.nekobt.to/info/metadata/#video-type)",
         ),
         cloup.option(
+            "-d",
+            "--database",
+            type=cloup.Choice(["anilist", "myanimelist", "mal"]),
+            default="myanimelist",
+            help="Select database to fetch anime title (anilist or myanimelist).",
+        ),
+        cloup.option(
             "-l",
             "--link",
             type=str,
             metavar="URL",
             default=None,
-            help="Anilist link to use for title.",
+            help="AniList or MyAnimeList link to use for title.",
         ),
         cloup.option(
             "-npi",
@@ -248,6 +257,7 @@ class nekoBT(Uploader):
 
     def __init__(self, ctx: cloup.Context, args: Any) -> None:
         super().__init__(ctx)
+        self.args = args
 
         self.needs_login = False
         self.private = False
@@ -256,9 +266,27 @@ class nekoBT(Uploader):
         self.batch: bool = args.batch
         self.video_type: int | None = args.video_type
         self.link: str = args.link
+
+        if self.link:
+            parsed = urllib.parse.urlparse(self.link)
+            hostname = (parsed.hostname or "").lower()
+            if hostname == "myanimelist.net" or hostname.endswith(".myanimelist.net"):
+                self.database = "myanimelist"
+            elif hostname == "anilist.co" or hostname.endswith(".anilist.co"):
+                self.database = "anilist"
+            else:
+                self.database = (
+                    args.database or self.config.get(self, "database", "myanimelist")
+                ).lower()
+        else:
+            self.database = (
+                args.database or self.config.get(self, "database", "myanimelist")
+            ).lower()
+
         self.no_plus_info: bool = args.no_plus_info
 
         self.sub_level: int = args.sub_level
+
         self.mtl: bool = args.machine_translation
         self.otl: bool = args.original_translation
         self.hardsub: bool = args.hardsub
@@ -272,6 +300,8 @@ class nekoBT(Uploader):
         self.ignore_warnings: bool = args.ignore_warnings
         self.hidden: bool = args.hidden
         self.anonymous: bool = args.anonymous
+
+        self.display_name = ""
 
         if not self.video_type and not self.auto:
             eprint("Missing video type!\n", fatal=False)
@@ -287,7 +317,7 @@ class nekoBT(Uploader):
             "https://tracker.nekobt.to/api/tracker/public/announce",
         ]
 
-        if self.config.get(self, "watch_dir"):
+        if self.watch_dir:
             default_t.append(
                 "https://tracker.nekobt.to/api/tracker/{passkey}/announce",
             )
@@ -303,7 +333,7 @@ class nekoBT(Uploader):
 
     @property
     def passkey(self) -> str | None:
-        if self.config.get(self, "watch_dir"):
+        if self.watch_dir:
             res = self.session.get(
                 url="https://nekobt.to/api/v1/users/@me",
                 cookies={"ssid": self.config.get(self, "api_key", "")},
@@ -490,11 +520,18 @@ class nekoBT(Uploader):
             self.movie = True
 
         if not self.no_plus_info:
-            if self.link and (plus_data := get_anilist_data(anilist_url=self.link)):
-                if plus_title := get_anilist_title(anilist_data=plus_data):
-                    name_plus.append(plus_title)
-            elif plus_title := get_anilist_title(search_name=title):
+            if self.database in {"myanimelist", "mal"}:
+                plus_title, _ = process_mal_info(self.link, path.stem)
+                if not plus_title:
+                    plus_title, _ = process_anilist_info(self.link, path.stem)
+            else:  # anilist
+                plus_title, _ = process_anilist_info(self.link, path.stem)
+                if not plus_title:
+                    plus_title, _ = process_mal_info(self.link, path.stem)
+
+            if plus_title:
                 name_plus.append(plus_title)
+
             if len(subtitles_langs) > 1:
                 name_plus.append("Multi-Subs")
 
@@ -522,9 +559,11 @@ class nekoBT(Uploader):
                     self.video_type = vtype
                     break
 
+        self.display_name = self._format_display_name(path.stem, name_plus, group_name)
+
         self.data = {
             "torrent": base64.b64encode(torrent_path.read_bytes()).decode(),
-            "title": self._format_display_name(path.stem, name_plus, group_name),
+            "title": self.display_name,
             "movie": self.movie,
             "batch": self.batch,
             "category": "1",  # TODO: for now only one category
@@ -582,12 +621,31 @@ class nekoBT(Uploader):
         info = res.get("data", {})
 
         if site_id := info.get("id"):
+            site_url = f"https://nekobt.to/torrents/{site_id}"
+            download_url = f"https://nekobt.to/api/v1/torrents/{site_id}/download"
             print(
-                f"Link: https://nekobt.to/torrents/{site_id}",
+                f"Link: {site_url}",
                 True,
             )
+            if self.telegram:
+                self._send_telegram_notification(
+                    self.display_name,
+                    site_url,
+                    download_url,
+                )
 
         return True
+
+    def _send_telegram_notification(
+        self, name: str, site_url: str, download_url: str
+    ) -> None:
+        message = (
+            f"\n<b>{name}</b>\n\n"
+            "- <b>Link</b>: "
+            f'<a href="{site_url}">View site</a> | '
+            f'<a href="{download_url}">Torrent file</a>'
+        )
+        send_telegram_message(self, message)
 
     def _get_group_info(
         self, grp_name: str | None = None, grp_id: str | int | None = None

@@ -77,6 +77,17 @@ class Uploader(ABC):
 
         self.data: dict[str, Any] = {}
         self.auto = False
+        self.telegram = bool(
+            ctx.parent.params.get("telegram") or self.config.get(self, "telegram")
+        )
+
+        watch_dir_flag = ctx.parent.params.get("watch_dir_flag")
+        if watch_dir_flag is False:
+            self.watch_dir: str | None = None
+        elif isinstance(watch_dir_flag, str) and watch_dir_flag:
+            self.watch_dir = watch_dir_flag
+        else:
+            self.watch_dir = self.config.get(self, "watch_dir")
 
     @property
     @abstractmethod

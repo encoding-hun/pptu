@@ -6,7 +6,6 @@ from types import SimpleNamespace
 from typing import Any
 
 import cloup
-import httpx
 import niquests
 import orjson
 from guessit import guessit
@@ -58,7 +57,9 @@ class nCore(Uploader):
     def __init__(self, ctx: cloup.Context, args: Any) -> None:
         super().__init__(ctx)
 
-        self.anonymous_upload: bool = args.anonymous_upload
+        self.anonymous_upload: bool = args.anonymous_upload or self.config.get(
+            self, "anonymous_upload", False
+        )
         self.request_id: str = args.request_id
 
         self.nfo_file: Path | None = None
@@ -164,15 +165,17 @@ class nCore(Uploader):
         imdb_id: str | None = None
         release_name: str = path.stem if path.is_file() else path.name
         gi = guessit(path.name)
-        self.client = httpx.Client(
+        self.client = niquests.Session(
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
             },
-            transport=httpx.HTTPTransport(
-                retries=5, proxy=self.config.get(self, "proxy")
-            ),
-            follow_redirects=True,
+            retries=5,
+            proxies={"all": self.config.get(self, "proxy")}
+            if self.config.get(self, "proxy")
+            else None,
+            disable_http3=True,
         )
+
         typ = ""
         if re.search(r"\.S\d+(E\d+|\.Special)+\.", str(path)) or gi["type"] == "episode":
             typ = "episode"
@@ -353,8 +356,7 @@ class nCore(Uploader):
             "epizod_szamok": "",
             "keresre": "nem",
             **({"keres_kodja": self.request_id} if self.request_id else {}),
-            "anonymous": self.anonymous_upload
-            or self.config.get(self, "anonymous_upload", False),
+            "anonymous": self.anonymous_upload,
             "elrejt": "nem",
             "mindent_tud1": "szabalyzat",
             "mindent_tud3": "seedeles",

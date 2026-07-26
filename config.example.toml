@@ -9,6 +9,10 @@ keksh_api_key = ""                   # needed for higher image size max in 5MB w
 ptpimg_api_key = ""                  # required for `ptpimg`
 torrent_creator = "torf"             # torf, torrenttools
 snapshot_row_width = 1000            # will be lowered if it's higher than the site's width for the torrent page
+# telegram = false                   # Send Telegram notification after upload
+# telegram_token = ""                # Global Telegram bot token
+# telegram_chat_id = ""              # Global Telegram channel/chat ID
+
 
 # Site credentials and settings
 # Credentials below are required unless you uses cookies instead.
@@ -56,10 +60,13 @@ anonymous_upload = false # default is false
 [nekobt]
 api_key = ""
 img_uploader = "keksh"
-group_at_start = false # Put the group name inside bracket at the start
-# announce_urls = []   # use other then default
+group_at_start = false  # Put the group name inside bracket at the start
+# announce_urls = []    # use other then default
 # group_tag = "MYGRP"
-# advert = ""          # Option for group link or other message to use in all upload
+# telegram = false      # Send Telegram notification after upload
+# telegram_token = ""   # Telegram bot token
+# telegram_chat_id = "" # Telegram channel/chat ID
+# advert = ""           # Option for group link or other message to use in all upload
 # proxy = "http://user:pass@example.com:6060"
 
 [nyaa]
@@ -67,9 +74,12 @@ username = ""
 password = ""
 img_uploader = "keksh"
 # announce_urls = ["http://nyaa.tracker.wf:7777/announce"]
-# telegram = false
-# telegram_token = ""
-# telegram_chat_id = ""
-# trusted = false
-# advert = ""
+# database = "anilist"         # Select database for title and info: anilist, myanimelist, or mal
+# info = ""                    # Custom information URL or text to use in Nyaa info field (overrides database URL)
+# advert = ""                  # Advert message/link to append to description
+# edit_code = ""               # Edit code for MediaInfo paste on Rentry.co (blank for random)
+# telegram = false             # Send Telegram notification after upload
+# telegram_token = ""          # Telegram bot token
+# telegram_chat_id = ""        # Telegram channel/chat ID
+# trusted = false              # Mark upload as trusted (if user account has trusted status)
 # proxy = "http://user:pass@example.com:6060"

@@ -102,6 +102,19 @@ CONTEXT_SETTINGS = Context.settings(
     help="Note to attach to the upload.",
 )
 @cloup.option(
+    "-t",
+    "--telegram",
+    is_flag=True,
+    help="Post Telegram notification after upload.",
+)
+@cloup.option(
+    "-w/-nw",
+    "--watch-dir / --no-watch-dir",
+    "watch_dir_flag",
+    default=None,
+    help="Custom watch directory to save torrents to (or --no-watch-dir to disable).",
+)
+@cloup.option(
     "-lt",
     "--list-trackers",
     is_flag=True,

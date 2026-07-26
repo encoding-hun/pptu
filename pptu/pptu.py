@@ -386,12 +386,12 @@ class PPTU:
         else:
             print(f"Upload to [cyan]{self.tracker.cli.name}[/] succeeded.")
 
-        if watch_dir := self.config.get(self.tracker, "watch_dir"):
-            watch_dir = Path(watch_dir).expanduser()
+        if self.tracker.watch_dir:
+            watch_dir_path = Path(self.tracker.watch_dir).expanduser()
             try:
                 metafile = Metafile.from_file(self.torrent_path)
                 metafile.add_fast_resume(self.path)
-                metafile.save(watch_dir / self.torrent_path.name)
+                metafile.save(watch_dir_path / self.torrent_path.name)
             except Exception as e:
                 wprint(f"Failed to save fast-resume torrent to watch directory: {e}")
 
