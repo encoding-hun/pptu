@@ -5,14 +5,13 @@ build-backend = "uv_build"
 [project]
 name = "pptu"
 description = "Python P2P Torrent Uploader"
-version = "2026.07.26"
+version = "2026.07.28"
 authors = [{ name = "pcroland" }, { name = "varyg" }]
 requires-python = "<3.14,>=3.11"
 
 dependencies = [
     "beautifulsoup4<5.0.0,>=4.12.3",
-    "cinemagoer<2024.0.0,>=2023.5.1",
-    "guessit<4.0.0,>=3.8.0",
+    "guessit<5.0.0,>=4.1.0",
     "humanize<5.0.0,>=4.9.0",
     "langcodes<4.0.0,>=3.4.0",
     "lxml<7.0.0,>=6.0.1",
@@ -21,7 +20,7 @@ dependencies = [
     "pyotp<3.0.0,>=2.9.0",
     "pyoxipng<10.0.0,>=9.0.0",
     "pyrosimple<3.0.0,>=2.14.0",
-    "rich<15.0.0,>=14.0.0",
+    "rich<16.0.0,>=15.0.0",
     "toml<1.0.0,>=0.10.2",
     "torf<5.0.0,>=4.2.7",
     "Wand<1.0.0,>=0.6.13",
