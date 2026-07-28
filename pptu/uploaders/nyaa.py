@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sys
 import urllib.parse
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,9 +17,10 @@ from pptu.utils.anilist import (
     process_anilist_info,
 )
 from pptu.utils.image import ImgUploader
-from pptu.utils.log import eprint, print, wprint
+from pptu.utils.log import eprint, print
 from pptu.utils.mal import process_mal_info
 from pptu.utils.regex import find
+from pptu.utils.rentry import rentry_upload
 from pptu.utils.telegram import send_telegram_message
 
 # Constants
@@ -218,6 +220,7 @@ class Nyaa(Uploader):
         self.complete: bool = args.complete
         self.remake: bool = args.remake
 
+        self.edit_code: str | None = args.edit_code
         self.info: str | None = args.info or self.config.get(self, "info")
         self.advert: str | None = args.advert
 
@@ -274,8 +277,6 @@ class Nyaa(Uploader):
                         f"[{self.SHORTCUT_MAP.get(cat_id)}] [cornflower_blue not bold]{cat_desc}[white /not bold]"
                     )
                 rprint(categories_tree)
-                import sys
-
                 sys.exit(1)
 
     @property
@@ -342,7 +343,6 @@ class Nyaa(Uploader):
         )
 
         name_plus: list[str] = []
-        print("wtf")
         db_info_url = ""
         if not self.skip_database:
             plus_title = None
@@ -358,7 +358,7 @@ class Nyaa(Uploader):
 
             if plus_title:
                 name_plus.append(plus_title)
-        print("wtdf")
+
         # Explicit CLI/config info overrides database info URL
         self.info_url = self.info or db_info_url or ""
 
@@ -432,7 +432,7 @@ class Nyaa(Uploader):
                 raw_text = mediainfo
             if isinstance(raw_text, str):
                 print("Uploading MediaInfo to rentry.co...")
-                rentry_res = self._rentry_upload(raw_text, self.edit_code)
+                rentry_res = rentry_upload(raw_text, self.edit_code)
 
                 if rentry_res:
                     url = rentry_res.get("url")
@@ -563,42 +563,6 @@ class Nyaa(Uploader):
         if channel := find(r"[A-Z]{2,3}[2|5|7] [0|1]", name_nyaa):
             name_nyaa = name_nyaa.replace(channel, channel.replace(" ", "."))
         return f"{name_nyaa} ({', '.join(name_plus)})" if name_plus else name_nyaa
-
-    def _rentry_upload(
-        self, text: str, edit_code: str | None = None
-    ) -> dict[str, Any] | None:
-        import time
-
-        base_url = "https://rentry.co"
-        for attempt in range(3):
-            try:
-                self.session.get(base_url, timeout=30)
-                token = self.session.cookies.get("csrftoken", "")
-                if not token:
-                    wprint("Failed to get CSRF token from Rentry")
-                    time.sleep(2**attempt)
-                    continue
-
-                res = self.session.post(
-                    f"{base_url}/api/new",
-                    headers={"Referer": base_url},
-                    data={
-                        "csrfmiddlewaretoken": token,
-                        "edit_code": edit_code or "",
-                        "text": text,
-                        "url": "",
-                    },
-                    timeout=30,
-                )
-                if res.status_code == 200:
-                    data = res.json()
-                    if isinstance(data, dict):
-                        return data
-                wprint(f"Rentry upload returned status code {res.status_code}")
-            except Exception as e:
-                wprint(f"Rentry upload attempt {attempt + 1} failed: {e}")
-            time.sleep(2**attempt)
-        return None
 
     def _send_telegram_notification(
         self, name: str, site_url: str, download_url: str
