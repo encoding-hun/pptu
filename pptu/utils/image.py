@@ -26,20 +26,18 @@ if TYPE_CHECKING:
 
 
 @lru_cache(maxsize=128)
-def _upload_single_keksh(
+def _cached_upload_keksh(
     file_path: Path,
     mtime: float,
     api_key: str | None,
+    uploader_ref: ImgUploader,
 ) -> str | None:
     if mtime <= 0:
         return None
 
     headers = {"x-kek-auth": api_key} if api_key else {}
-    with (
-        niquests.Session(retries=3, disable_http3=True) as session,
-        file_path.open("rb") as fd,
-    ):
-        r = session.post(
+    with file_path.open("rb") as fd:
+        r = uploader_ref.session.post(
             url="https://kek.sh/api/v1/posts",
             headers=headers,
             files={"file": fd},
@@ -50,19 +48,17 @@ def _upload_single_keksh(
 
 
 @lru_cache(maxsize=128)
-def _upload_single_ptpimg(
+def _cached_upload_ptpimg(
     file_path: Path,
     mtime: float,
     api_key: str | None,
+    uploader_ref: ImgUploader,
 ) -> str | None:
     if mtime <= 0:
         return None
 
-    with (
-        niquests.Session(retries=3, disable_http3=True) as session,
-        file_path.open("rb") as fd,
-    ):
-        r = session.post(
+    with file_path.open("rb") as fd:
+        r = uploader_ref.session.post(
             url="https://ptpimg.me/upload.php",
             files={"file-upload[]": fd},
             data={"api_key": api_key},
@@ -79,6 +75,7 @@ class ImgUploader:
         self.tracker = tracker
         self.uploader = tracker.config.get(tracker, "img_uploader")
         self.api_key = tracker.config.get("default", f"{self.uploader}_api_key", None)
+        self.session = niquests.Session(retries=3, disable_http3=True)
 
     def hdbimg(self, files: list[Path], thumbnail_width: int, name: str) -> list[Any]:
         if self.tracker.cli.name != "HDBits":
@@ -130,7 +127,9 @@ class ImgUploader:
         ) as progress:
             for snap in progress.track(files, description="Uploading snapshots"):
                 try:
-                    url = _upload_single_keksh(snap, snap.stat().st_mtime, self.api_key)
+                    url = _cached_upload_keksh(
+                        snap, snap.stat().st_mtime, self.api_key, self
+                    )
                     if url:
                         results.append(url)
                 except Exception as e:
@@ -152,7 +151,9 @@ class ImgUploader:
         ) as progress:
             for snap in progress.track(files, description="Uploading snapshots"):
                 try:
-                    url = _upload_single_ptpimg(snap, snap.stat().st_mtime, self.api_key)
+                    url = _cached_upload_ptpimg(
+                        snap, snap.stat().st_mtime, self.api_key, self
+                    )
                     if url:
                         results.append(url)
                 except Exception as e:
