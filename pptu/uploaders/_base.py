@@ -81,11 +81,13 @@ class Uploader(ABC):
             ctx.parent.params.get("telegram") or self.config.get(self, "telegram")
         )
 
-        watch_dir_flag = ctx.parent.params.get("watch_dir_flag")
-        if watch_dir_flag is False:
+        no_watch_dir = ctx.parent.params.get("no_watch_dir")
+        watch_dir_path = ctx.parent.params.get("watch_dir_path")
+
+        if no_watch_dir:
             self.watch_dir: str | None = None
-        elif isinstance(watch_dir_flag, str) and watch_dir_flag:
-            self.watch_dir = watch_dir_flag
+        elif watch_dir_path:
+            self.watch_dir = str(watch_dir_path)
         else:
             self.watch_dir = self.config.get(self, "watch_dir")
 

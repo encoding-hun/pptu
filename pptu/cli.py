@@ -108,11 +108,20 @@ CONTEXT_SETTINGS = Context.settings(
     help="Post Telegram notification after upload.",
 )
 @cloup.option(
-    "-w/-nw",
-    "--watch-dir / --no-watch-dir",
-    "watch_dir_flag",
+    "-w",
+    "--watch-dir",
+    "watch_dir_path",
+    type=cloup.Path(exists=False, file_okay=False, dir_okay=True),
     default=None,
-    help="Custom watch directory to save torrents to (or --no-watch-dir to disable).",
+    help="Custom watch directory path to save torrents to.",
+)
+@cloup.option(
+    "-nw",
+    "--no-watch-dir",
+    "no_watch_dir",
+    is_flag=True,
+    default=False,
+    help="Disable saving torrents to watch directory.",
 )
 @cloup.option(
     "-lt",
