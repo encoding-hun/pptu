@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11, <3.15"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -1239,7 +1239,7 @@ wheels = [
 
 [[package]]
 name = "pptu"
-version = "2026.10.24"
+version = "2026.10.24.1"
 source = { editable = "." }
 dependencies = [
     { name = "beaupy" },
