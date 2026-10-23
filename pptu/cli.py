@@ -199,47 +199,54 @@ def result(ctx: cloup.Context, /, trackers: list[Uploader], **kwargs: Any) -> No
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         for tracker in trackers:
-            pptu = PPTU(
-                path,
-                tracker,
-                note=args.note,
-                auto=args.auto,
-                snapshots=not args.disable_snapshots,
-                dirs=ctx.obj.dirs,
-            )
+            try:
+                pptu = PPTU(
+                    path,
+                    tracker,
+                    note=args.note,
+                    auto=args.auto,
+                    snapshots=not args.disable_snapshots,
+                    dirs=ctx.obj.dirs,
+                )
 
-            print(
-                f"\n[bold green]Creating torrent file for tracker ({tracker.cli.aliases[0]})[/]"
-            )
-            pptu.create_torrent()
-
-            mediainfo: str | list[str] | None = None
-            if tracker.mediainfo:
-                print(f"\n[bold green]Generating MediaInfo ({tracker.cli.aliases[0]})[/]")
-                if not (mediainfo := pptu.get_mediainfo()):
-                    eprint("Failed to generate MediaInfo")
+                print(
+                    f"\n[bold green]Creating torrent file for tracker ({tracker.cli.aliases[0]})[/]"
+                )
+                if not pptu.create_torrent():
                     continue
-                print("Done!")
 
-            # Generating snapshots
-            snapshots = pptu.generate_snapshots()
+                mediainfo: str | list[str] | None = None
+                if tracker.mediainfo:
+                    print(
+                        f"\n[bold green]Generating MediaInfo ({tracker.cli.aliases[0]})[/]"
+                    )
+                    if not (mediainfo := pptu.get_mediainfo()):
+                        eprint("Failed to generate MediaInfo")
+                        continue
+                    print("Done!")
 
-            print(f"\n[bold green]Preparing upload ({tracker.cli.aliases[0]})[/]")
-            if not pptu.prepare(mediainfo, snapshots):
+                # Generating snapshots
+                snapshots = pptu.generate_snapshots()
+
+                print(f"\n[bold green]Preparing upload ({tracker.cli.aliases[0]})[/]")
+                if not pptu.prepare(mediainfo, snapshots):
+                    continue
+
+                if fast_upload:
+                    jobs.append((pptu, mediainfo, snapshots))
+                else:
+                    print(f"\n[bold green]Uploading ({tracker.cli.aliases[0]})[/]")
+                    if args.confirm and pptu.tracker.data:
+                        print(pptu.tracker.data, highlight=True)
+                    if args.skip_upload or (
+                        args.confirm and not Confirm.ask("Upload torrent?")
+                    ):
+                        print("Skipping upload")
+                        continue
+                    pptu.upload(mediainfo, snapshots)
+            except Exception as e:
+                eprint(f"Error processing tracker {tracker.cli.name}: {e}", fatal=False)
                 continue
-
-            if fast_upload:
-                jobs.append((pptu, mediainfo, snapshots))
-            else:
-                print(f"\n[bold green]Uploading ({tracker.cli.aliases[0]})[/]")
-                if args.confirm and pptu.tracker.data:
-                    print(pptu.tracker.data, highlight=True)
-                if args.skip_upload or (
-                    args.confirm and not Confirm.ask("Upload torrent?")
-                ):
-                    print("Skipping upload")
-                    continue
-                pptu.upload(mediainfo, snapshots)
 
     if fast_upload:
         for pptu, mediainfo, snapshots in jobs:

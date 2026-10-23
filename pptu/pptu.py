@@ -82,31 +82,25 @@ class PPTU:
 
         announce_url = [x.format(passkey=passkey) for x in announce_url]
 
-        base_torrent_path = next(
-            iter(
-                self.cache_dir.glob(
-                    glob.escape(f"{self.path.name}[") + "*" + glob.escape("].torrent")
-                )
-            ),
-            None,
-        )
+        cached = glob.escape(f"{self.path.name}[") + "*" + glob.escape("].torrent")
+        try:
+            time = self.path.stat().st_mtime
+            if self.path.is_dir():
+                time = min(x.stat().st_mtime for x in self.path.iterdir())
+        except Exception:
+            time = 0
+        # Torrents older than the source (any tracker's) are stale: drop them, so
+        # they're neither returned as-is nor reused as the base for new hashes
+        for old in self.cache_dir.glob(cached):
+            if old.stat().st_mtime < time:
+                if old == self.torrent_path:
+                    wprint("Source was possible updated, creating new torrent file.")
+                old.unlink()
 
         if self.torrent_path.exists():
-            try:
-                time = self.path.stat().st_mtime
-                if self.path.is_dir():
-                    time = min(x.stat().st_mtime for x in self.path.iterdir())
-                if self.torrent_path.stat().st_mtime < time:
-                    wprint("Source was possible updated, creating new torrent file.")
-                    if base_torrent_path:
-                        base_torrent_path.unlink()
-                    self.torrent_path.unlink()
-                else:
-                    return True
-            except Exception:
-                pass
+            return True
 
-            return False
+        base_torrent_path = next(iter(self.cache_dir.glob(cached)), None)
 
         if isinstance(self.tracker.randomize_infohash, bool):
             randomize_infohash = self.tracker.randomize_infohash
@@ -280,6 +274,7 @@ class PPTU:
             i += 1
 
         snapshots = []
+        parsed: dict[Path, MediaInfo] = {}  # parse each file once, not per snapshot
         print()
         if num_snapshots:
             last_file = None
@@ -294,7 +289,9 @@ class PPTU:
                     range(num_snapshots),
                     description=f"[bold green]Generating snapshots ({self.tracker.cli.aliases[0]})[/]",
                 ):
-                    mediainfo_obj = MediaInfo.parse(files[i])
+                    if files[i] not in parsed:
+                        parsed[files[i]] = MediaInfo.parse(files[i])
+                    mediainfo_obj = parsed[files[i]]
                     if not mediainfo_obj.video_tracks:
                         eprint("File has no video tracks")
                         return []
