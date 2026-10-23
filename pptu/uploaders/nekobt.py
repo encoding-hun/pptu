@@ -334,10 +334,16 @@ class nekoBT(Uploader):
     @property
     def passkey(self) -> str | None:
         if self.watch_dir:
-            res = self.session.get(
-                url="https://nekobt.to/api/v1/users/@me",
-                cookies={"ssid": self.config.get(self, "api_key", "")},
-            ).json()
+            try:
+                resp = self.session.get(
+                    url="https://nekobt.to/api/v1/users/@me",
+                    cookies={"ssid": self.config.get(self, "api_key", "")},
+                    timeout=30,
+                )
+                res = resp.json()
+            except Exception as e:
+                eprint(f"Failed to get passkey from {self.cli.name}: {e}", fatal=False)
+                return None
 
             if res.get("error"):
                 eprint(res.get("message"), fatal=False)
@@ -454,7 +460,7 @@ class nekoBT(Uploader):
 
             secondary_group_info = self._get_group_info(secondary_group_name)
 
-            if not role:
+            if not role and not self.auto:
                 role = Prompt.ask(f"Role for {secondary_group_name}")
 
             secondary_groups.append(
@@ -602,11 +608,17 @@ class nekoBT(Uploader):
         *_: Any,
         **__: Any,
     ) -> bool:
-        res = self.session.post(
-            url="https://nekobt.to/api/v1/upload",
-            cookies={"ssid": self.config.get(self, "api_key", "")},
-            json=self.data,
-        ).json()
+        try:
+            resp = self.session.post(
+                url="https://nekobt.to/api/v1/upload",
+                cookies={"ssid": self.config.get(self, "api_key", "")},
+                json=self.data,
+                timeout=60,
+            )
+            res = resp.json()
+        except Exception as e:
+            eprint(f"Failed to upload to {self.cli.name}: {e}", fatal=False)
+            return False
 
         if warns := res.get("warns", []):
             for warn in warns:
@@ -653,10 +665,15 @@ class nekoBT(Uploader):
         self, grp_name: str | None = None, grp_id: str | int | None = None
     ) -> Any:
         if grp_name:
-            res = self.session.get(
-                "https://nekobt.to/api/v1/groups/search",
-                params={"order": "asc", "limit": "5", "query": grp_name},
-            ).json()
+            try:
+                res = self.session.get(
+                    "https://nekobt.to/api/v1/groups/search",
+                    params={"order": "asc", "limit": "5", "query": grp_name},
+                    timeout=30,
+                ).json()
+            except Exception as e:
+                eprint(f"Failed to search group on {self.cli.name}: {e}", fatal=False)
+                res = {}
 
             if res.get("error"):
                 eprint(res.get("message"), exit_code=1)
@@ -665,7 +682,14 @@ class nekoBT(Uploader):
                 grp_id = group.get("id")
                 print(f"Detected group: {group.get('display_name')} [{grp_id}]")
 
-        res = self.session.get(f"https://nekobt.to/api/v1/groups/{grp_id}").json()
+        try:
+            res = self.session.get(
+                f"https://nekobt.to/api/v1/groups/{grp_id}", timeout=30
+            ).json()
+        except Exception as e:
+            eprint(f"Failed to get group info from {self.cli.name}: {e}", fatal=False)
+            return {}
+
         if res.get("error"):
             eprint(res.get("message"), exit_code=1)
 
