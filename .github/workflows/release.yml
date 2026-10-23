@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  dist:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Read version
+        id: meta
+        run: |
+          version=$(sed -nE 's/^version = "(.*)"/\1/p' pyproject.toml | head -n1)
+          [ -n "$version" ] || { echo "Could not read version from pyproject.toml"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build sdist and wheel
+        run: |
+          uv build
+          uvx twine check dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  binaries:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+            ext: ""
+          - os: windows-latest
+            platform: windows-x64
+            ext: ".exe"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Build
+        shell: bash
+        run: |
+          uv sync --no-dev
+          uv pip install pyinstaller
+          uv run --no-sync pyinstaller --onefile --name pptu \
+            --paths . \
+            --collect-submodules pptu \
+            --collect-all pymal \
+            --collect-all pymediainfo \
+            --collect-all guessit \
+            --collect-all babelfish \
+            --collect-all rebulk \
+            --collect-all langcodes \
+            --collect-all language_data \
+            --collect-all cloup \
+            --collect-all rich \
+            --collect-all niquests \
+            --collect-all urllib3_future \
+            --collect-all wassima \
+            --collect-all qh3 \
+            --collect-all pyrosimple \
+            --collect-all torf \
+            --add-data "pyproject.toml:." \
+            pptu/cli.py
+
+      - name: Smoke test
+        shell: bash
+        run: ./dist/pptu${{ matrix.ext }} --version
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pptu-${{ matrix.platform }}
+          path: dist/pptu${{ matrix.ext }}
+
+  release:
+    # Only runs once the package and both binaries built and passed their checks
+    needs: [dist, binaries]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.dist.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pptu-*
+          path: bin
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}
+          skip-existing: true
+
+      - name: Create GitHub release
+        run: |
+          cp bin/pptu-linux-x64/pptu "pptu-$VERSION-linux-x64"
+          cp bin/pptu-windows-x64/pptu.exe "pptu-$VERSION-windows-x64.exe"
+          gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$VERSION" --repo "$GITHUB_REPOSITORY" \
+                 --title "$VERSION" --generate-notes
+          gh release upload "$VERSION" --repo "$GITHUB_REPOSITORY" --clobber \
+            dist/* "pptu-$VERSION-linux-x64" "pptu-$VERSION-windows-x64.exe"
