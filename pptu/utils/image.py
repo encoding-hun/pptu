@@ -77,6 +77,16 @@ class ImgUploader:
         self.api_key = tracker.config.get("default", f"{self.uploader}_api_key", None)
         self.session = niquests.Session(retries=3, disable_http3=True)
 
+    # Equal by host+key so the lru_cache upload cache hits across trackers.
+    def __hash__(self) -> int:
+        return hash((self.uploader, self.api_key))
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, ImgUploader) and (self.uploader, self.api_key) == (
+            other.uploader,
+            other.api_key,
+        )
+
     def hdbimg(self, files: list[Path], thumbnail_width: int, name: str) -> list[Any]:
         if self.tracker.cli.name != "HDBits":
             eprint("HDBImg uploader can only be used for HDBits!")
