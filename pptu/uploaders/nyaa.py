@@ -11,6 +11,8 @@ import cloup
 import orjson
 from langcodes import Language
 from pymediainfo import MediaInfo
+from rich import print as rprint
+from rich.tree import Tree
 
 from pptu.uploaders import Uploader
 from pptu.utils.anilist import (
@@ -193,6 +195,13 @@ class Nyaa(Uploader):
             default=False,
             help="Do not attach Mediainfo to the torrent.",
         ),
+        cloup.option(
+            "-ch",
+            "--category-help",
+            is_flag=True,
+            default=False,
+            help="Print the available categories.",
+        ),
     )
     @cloup.pass_context
     def cli(ctx: cloup.Context, /, **kwargs: Any) -> Nyaa:
@@ -246,6 +255,8 @@ class Nyaa(Uploader):
 
         self.no_mediainfo: bool = args.no_mediainfo
 
+        self.category_help = args.category_help
+
         self.private = False
         self.needs_login = False
 
@@ -265,10 +276,8 @@ class Nyaa(Uploader):
             if self.auto:
                 self.category = "1_2"
             else:
-                from rich import print as rprint
-                from rich.tree import Tree
-
-                eprint("Missing category!\n", fatal=False)
+                if not self.category_help:
+                    eprint("Missing category!\n", fatal=False)
                 categories_tree = Tree(
                     "[chartreuse2]Available categories:[white /not bold]"
                 )
