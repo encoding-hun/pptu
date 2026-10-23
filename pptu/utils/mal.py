@@ -7,7 +7,7 @@ from pymal.searches.search_animes_provider import SearchAnimesProvider
 from rich import get_console
 
 from pptu.utils import similar
-from pptu.utils.anilist import extract_name_from_filename, get_anilist_data
+from pptu.utils.anilist import extract_name_from_filename, get_anilist_data, unavailable
 from pptu.utils.collections import first
 from pptu.utils.log import eprint, wprint
 from pptu.utils.regex import find
@@ -17,6 +17,9 @@ from pptu.utils.regex import find
 def get_mal_data(
     search_name: str = "", mal_id: int | str | None = None
 ) -> dict[str, Any] | None:
+    if "mal" in unavailable:
+        return None
+
     console = get_console()
 
     if mal_id:
@@ -31,7 +34,8 @@ def get_mal_data(
                     "url": f"https://myanimelist.net/anime/{anime.id}",
                 }
         except Exception as e:
-            wprint(f"Failed to fetch MAL data via pymal for ID {mal_id}: {e}")
+            unavailable.add("mal")
+            wprint(f"MAL unavailable, skipping it from now on: {e}")
             return None
 
     if search_name:
@@ -78,7 +82,8 @@ def get_mal_data(
                         "url": f"https://myanimelist.net/anime/{best.id}",
                     }
         except Exception as e:
-            wprint(f"Failed pymal search for '{search_name}': {e}")
+            unavailable.add("mal")
+            wprint(f"MAL unavailable, skipping it from now on: {e}")
 
     return None
 
@@ -149,6 +154,8 @@ def process_mal_info(
 
     mal_data: dict | None = None
     for attempt in range(max_retries):
+        if "mal" in unavailable:
+            break
         try:
             mal_data = get_mal_link(link or "", search_name)
             break

@@ -10,6 +10,10 @@ from pptu.utils.collections import first_or_else, first_or_none
 from pptu.utils.log import wprint
 from pptu.utils.regex import find
 
+# Providers that failed with a network error this run; skipped afterwards so a
+# dead service costs one short timeout instead of one per lookup/tracker.
+unavailable: set[str] = set()
+
 
 def extract_name_from_filename(file_name: str) -> tuple[str, bool]:
     is_movie = False
@@ -116,8 +120,11 @@ def get_anilist_data(search_name: str = "", anilist_url: str = "") -> dict[str, 
             "variables": {"search": search_name},
         }
 
+    if "anilist" in unavailable:
+        return {}
+
     try:
-        with niquests.Session(retries=2, disable_http3=True) as session:
+        with niquests.Session(retries=1, disable_http3=True) as session:
             res_raw = session.post(
                 url="https://graphql.anilist.co",
                 headers={
@@ -125,12 +132,18 @@ def get_anilist_data(search_name: str = "", anilist_url: str = "") -> dict[str, 
                     "Accept": "application/json",
                 },
                 json=json_data,
-                timeout=15,
+                timeout=5,
             )
             res_raw.raise_for_status()
             res = res_raw.json()
     except Exception as e:
-        wprint(f"Failed to fetch AniList data: {e}")
+        if isinstance(
+            e, (niquests.exceptions.ConnectionError, niquests.exceptions.Timeout)
+        ):
+            unavailable.add("anilist")
+            wprint(f"AniList unavailable, skipping it from now on: {e}")
+        else:
+            wprint(f"Failed to fetch AniList data: {e}")
         return {}
 
     if not isinstance(res, dict):
