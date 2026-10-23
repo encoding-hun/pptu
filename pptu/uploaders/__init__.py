@@ -1,6 +1,6 @@
 import importlib
+import pkgutil
 import sys
-from pathlib import Path
 
 from pptu.uploaders._base import Uploader  # noqa: F401
 from pptu.utils import pluralize
@@ -9,12 +9,13 @@ from pptu.utils import pluralize
 failed_uploader: list[str] = []
 successful_uploader: list[str] = []
 
-for uploader in sorted(Path(__file__).parent.iterdir()):
+# pkgutil instead of listing the directory, so it also works in frozen builds
+for uploader in sorted(pkgutil.iter_modules(__path__), key=lambda m: m.name):
     if not uploader.name.startswith("_"):
-        module = importlib.import_module(f"pptu.uploaders.{uploader.stem}")
+        module = importlib.import_module(f"pptu.uploaders.{uploader.name}")
         try:
             cls = getattr(
-                module, next(x for x in module.__dict__ if x.lower() == uploader.stem)
+                module, next(x for x in module.__dict__ if x.lower() == uploader.name)
             )
         except StopIteration:
             failed_uploader.append(cls.__name__)
