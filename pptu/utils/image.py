@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import niquests
 import oxipng
+from PIL import Image
 from rich.console import Console
 from rich.progress import (
     BarColumn,
@@ -17,7 +18,6 @@ from rich.progress import (
     TextColumn,
     TimeRemainingColumn,
 )
-from wand.image import Image
 
 from pptu.utils.log import eprint, print, wprint
 
@@ -214,10 +214,11 @@ def generate_thumbnails(
         for snap in progress.track(snapshots, description="Generating thumbnails"):
             thumb = snap.with_name(f"{snap.stem}_thumb_{width}.{file_type}")
             if not thumb.exists():
-                with Image(filename=snap) as img:
-                    img.resize(width, round(img.height / (img.width / width)))
-                    img.depth = 8
-                    img.save(filename=thumb)
+                with Image.open(snap) as img:
+                    img.convert("RGB").resize(
+                        (width, round(img.height / (img.width / width))),
+                        Image.Resampling.LANCZOS,
+                    ).save(thumb, quality=92)
                 if file_type == "png":
                     oxipng.optimize(thumb)
 

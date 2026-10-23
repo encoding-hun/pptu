@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 import oxipng
 import torf
+from PIL import Image
 from platformdirs import PlatformDirs
 from pymediainfo import MediaInfo
 from pyrosimple.util.metafile import Metafile
@@ -22,7 +23,6 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 from torf import Torrent
-from wand.image import Image
 
 from pptu.utils.collections import as_list, flatten
 from pptu.utils.config import Config
@@ -345,9 +345,8 @@ class PPTU:
                             ],
                             check=True,
                         )
-                        with Image(filename=snap) as img:
-                            img.depth = 8
-                            img.save(filename=snap)
+                        with Image.open(snap) as img:
+                            img.convert("RGB").save(snap)
                         oxipng.optimize(snap)
                     snapshots.append(snap)
 
