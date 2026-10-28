@@ -98,6 +98,30 @@ For sites with captcha, a 2captcha API key is required to solve the captcha. Man
 
 - Credential auth requires passkey in addition to username and password.
 
+### Cloudflare-protected trackers
+
+Some trackers (currently HDBits) sit behind a Cloudflare managed challenge that only a real, windowed browser can pass (headless browsers are detected and fail). The challenge yields a `cf_clearance` cookie that is bound to your IP and User-Agent. Settings go in the tracker's own config section (`[hdbits]` below).
+
+**Desktop: built-in browser solver (automatic)**
+
+- Install the extra: `pip install 'pptu[cloudflare]'` (or `pip install nodriver`). It needs Chrome, Chromium, Edge or Brave installed.
+- pptu briefly opens the browser, clears the check, and stores the clearance and the browser's User-Agent next to the tracker's cookies. Later runs reuse them until they expire.
+- If the browser isn't auto-detected, set `browser_path` (e.g. `/snap/bin/chromium`, `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` or `C:\Program Files\Google\Chrome\Application\chrome.exe`).
+- On a Linux server with a browser but no display, run `xvfb-run pptu ...`.
+- If Cloudflare shows a "Verify you are human" checkbox, click it in the opened window. For unattended runs (`--auto`, watch folders), set `2captcha_api_key` (the same key AvistaZ uses) instead: when the browser hasn't passed after 15 seconds, pptu has 2captcha solve the Turnstile check and hands the token back to the page, so no click is needed.
+
+**Headless / CLI-only servers: exported cookies**
+
+1. On a machine with a browser on the same network (same IP / VPN exit), pass the check on the tracker's site and export its cookies as Netscape `cookies.txt` (must include `cf_clearance`).
+2. Save them as the tracker's cookie file in pptu's cookies directory (`~/.local/share/pptu/cookies/` on Linux): `<tracker>.txt` (e.g. `hdb.txt`), or `<tracker>_<sha1 of your username>.txt` if a `username` is set. No username or password is needed for this.
+3. Tell pptu that browser's exact User-Agent, because a mismatch gets the clearance rejected:
+   ```toml
+   [hdbits]
+   browser_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ... Chrome/131.0.0.0 Safari/537.36"
+   ```
+
+When run interactively without a solver, pptu prints the cookie file path, waits for you to drop the file in, and asks for the User-Agent, so steps 2 and 3 can be done on the spot.
+
 ### AvistaZ Network
 
 - Using credential auth is strongly recommended as cookies always expire within a few days.

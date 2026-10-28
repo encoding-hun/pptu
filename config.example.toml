@@ -37,6 +37,8 @@ username = ""
 password = ""
 img_uploader = "hdbimg"
 totp_secret = ""
+# browser_path = "/snap/bin/chromium"  # if the browser isn't auto-detected
+# browser_ua = "Mozilla/5.0 ... Chrome/131.0.0.0 Safari/537.36"  # only for manual cookies
 # proxy = "http://user:pass@example.com:6060"
 
 [passthepopcorn]
