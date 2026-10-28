@@ -3,7 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from hashlib import sha1
 from http.cookiejar import MozillaCookieJar
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 import cloup
 import niquests
@@ -12,9 +13,6 @@ from niquests.packages.urllib3 import Retry
 
 from pptu.utils.config import Config
 from pptu.utils.log import eprint
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 class Uploader(ABC):
@@ -27,53 +25,68 @@ class Uploader(ABC):
     needs_login: bool = True
     private: bool = True
     randomize_infohash: bool | None = None
+    # Route the session through a Cloudflare-bypassing client
+    cloudflare_bypass: bool = False
 
     def __init__(self, ctx: cloup.Context) -> None:
         self.dirs = ctx.obj.dirs
         self.config: Config = ctx.obj.config
 
-        self.cookies_path = (
-            self.dirs.user_data_path
-            / "cookies"
-            / f"""{self.cli.name.lower()}_{sha1(f"{self.config.get(self, 'username')}".encode()).hexdigest()}.txt"""
-        )
+        username = self.config.get(self, "username")
+        suffix = f"_{sha1(f'{username}'.encode()).hexdigest()}" if username else ""
+        cookies_dir = self.dirs.user_data_path / "cookies"
+        self.cookies_path = cookies_dir / f"{self.cli.name.lower()}{suffix}.txt"
         if not self.cookies_path.exists():
-            self.cookies_path = (
-                self.dirs.user_data_path
-                / "cookies"
-                / f"""{self.cli.aliases[0].lower()}_{sha1(f"{self.config.get(self, 'username')}".encode()).hexdigest()}.txt"""
-            )
+            self.cookies_path = cookies_dir / f"{self.cli.aliases[0].lower()}{suffix}.txt"
         self.cookie_jar = MozillaCookieJar(self.cookies_path)
         if self.cookies_path.exists():
-            self.cookie_jar.load(ignore_expires=True, ignore_discard=True)
+            try:
+                self.cookie_jar.load(ignore_expires=True, ignore_discard=True)
+            except OSError as e:
+                eprint(f"Could not read cookies file [cyan]{self.cookies_path}[/]: {e}")
 
-        self.session = niquests.Session(disable_http3=True)
-        for scheme in ("http://", "https://"):
-            self.session.mount(
-                scheme,
-                HTTPAdapter(
-                    max_retries=Retry(
-                        total=5,
-                        backoff_factor=1,
-                        allowed_methods=[
-                            "DELETE",
-                            "GET",
-                            "HEAD",
-                            "OPTIONS",
-                            "POST",
-                            "PUT",
-                            "TRACE",
-                        ],
-                        status_forcelist=[429, 500, 502, 503, 504],
-                        raise_on_status=False,
-                    )
-                ),
+        self.session: niquests.Session
+        if self.cloudflare_bypass:
+            from pptu.utils.cloudflare import CFSession
+
+            self.session = CFSession(
+                cookie_jar=self.cookie_jar,
+                cookies_path=self.cookies_path,
+                proxy=self.config.get(self, "proxy") or None,
+                user_agent=self.config.get(self, "browser_ua") or None,
+                browser_path=self.config.get(self, "browser_path") or None,
+                twocaptcha_api_key=self.config.get(self, "2captcha_api_key") or None,
+                tracker_name=self.cli.name,
+                interactive=not bool(ctx.parent.params.get("auto")),
             )
+        else:
+            self.session = niquests.Session(disable_http3=True)
+            for scheme in ("http://", "https://"):
+                self.session.mount(
+                    scheme,
+                    HTTPAdapter(
+                        max_retries=Retry(
+                            total=5,
+                            backoff_factor=1,
+                            allowed_methods=[
+                                "DELETE",
+                                "GET",
+                                "HEAD",
+                                "OPTIONS",
+                                "POST",
+                                "PUT",
+                                "TRACE",
+                            ],
+                            status_forcelist=[429, 500, 502, 503, 504],
+                            raise_on_status=False,
+                        )
+                    ),
+                )
 
-        for cookie in self.cookie_jar:
-            self.session.cookies.set_cookie(cookie)
+            for cookie in self.cookie_jar:
+                self.session.cookies.set_cookie(cookie)
 
-        self.session.proxies.update({"all": self.config.get(self, "proxy")})
+            self.session.proxies.update({"all": self.config.get(self, "proxy")})
 
         self.data: dict[str, Any] = {}
         self.auto = False

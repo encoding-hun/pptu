@@ -11,6 +11,7 @@ import cloup
 from cloup import Context, HelpFormatter, HelpTheme, Style
 from platformdirs import PlatformDirs
 from rich.console import Console
+from rich.markup import escape
 from rich.prompt import Confirm
 from rich.table import Table
 
@@ -165,14 +166,23 @@ def main(ctx: cloup.Context, /, **kwargs: Any) -> None:
 @main.result_callback()
 @cloup.pass_context
 def result(ctx: cloup.Context, /, trackers: list[Uploader], **kwargs: Any) -> None:
+    from pptu.utils.cloudflare import CloudflareBlocked
+
     args = SimpleNamespace(**kwargs)
+    failed_trackers: list[Uploader] = []
 
     for tracker in trackers:
         if tracker.needs_login:
             print("[bold green]Logging in to tracker[/]")
             print(f"[bold cyan]Logging in to {tracker.cli.aliases[0]}[/]")
-            if not tracker.login(args=args):
-                eprint(f"Failed to log in to tracker [cyan]{tracker.cli.name}[/].")
+            try:
+                if not tracker.login(args=args):
+                    eprint(f"Failed to log in to tracker [cyan]{tracker.cli.name}[/].")
+                    failed_trackers.append(tracker)
+                    continue
+            except CloudflareBlocked as e:
+                eprint(escape(str(e)))
+                failed_trackers.append(tracker)
                 continue
         for cookie in tracker.session.cookies:
             tracker.cookie_jar.set_cookie(cookie)
@@ -182,6 +192,9 @@ def result(ctx: cloup.Context, /, trackers: list[Uploader], **kwargs: Any) -> No
             tracker.cookies_path.unlink(missing_ok=True)
 
         tracker.cookie_jar.save(ignore_discard=True)
+
+    for tracker in failed_trackers:
+        trackers.remove(tracker)
 
     jobs: list[tuple[PPTU, str | list[str] | None, list[Path]]] = []
 
@@ -244,8 +257,11 @@ def result(ctx: cloup.Context, /, trackers: list[Uploader], **kwargs: Any) -> No
                         print("Skipping upload")
                         continue
                     pptu.upload(mediainfo, snapshots)
+            except CloudflareBlocked as e:
+                eprint(escape(str(e)))
+                continue
             except Exception as e:
-                eprint(f"Error processing tracker {tracker.cli.name}: {e}", fatal=False)
+                eprint(f"Error processing tracker {tracker.cli.name}: {e}")
                 continue
 
     if fast_upload:
@@ -256,7 +272,11 @@ def result(ctx: cloup.Context, /, trackers: list[Uploader], **kwargs: Any) -> No
             if args.skip_upload or (args.confirm and not Confirm.ask("Upload torrent?")):
                 print("Skipping upload")
                 continue
-            pptu.upload(mediainfo, snapshots)
+            try:
+                pptu.upload(mediainfo, snapshots)
+            except CloudflareBlocked as e:
+                eprint(escape(str(e)))
+                continue
             print()
 
 
