@@ -5,10 +5,13 @@ import contextlib
 import json
 import logging
 import os
+import subprocess
 import sys
+import tempfile
 import time
 from http.cookiejar import Cookie
 from pathlib import Path
+from shutil import which
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
@@ -16,8 +19,11 @@ import niquests
 import utls
 from niquests.adapters import HTTPAdapter
 from niquests.exceptions import ConnectionError as NiquestsConnectionError
+from platformdirs import PlatformDirs
 from rich.prompt import Prompt
+from utls.profiles._base import Ext, Group, SigAlg
 
+from pptu import PROG_NAME
 from pptu.utils.log import eprint, print, wprint
 from pptu.utils.twocaptcha import TwoCaptchaError, solve_turnstile
 
@@ -27,6 +33,8 @@ if TYPE_CHECKING:
 RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 MAX_TRANSIENT_RETRIES = 5
 MAX_CHALLENGE_SOLVES = 2
+# Headless HTTP-based cfsolve usually completes within a few seconds.
+CFSOLVE_TIMEOUT = 60
 # A managed challenge usually clears itself within seconds once a real browser
 # renders it; the budget covers slow turnstile interludes.
 INTERNAL_SOLVE_TIMEOUT = 75
@@ -68,6 +76,11 @@ TURNSTILE_HOOK_JS = """
 FALLBACK_CHROME_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/131.0.0.0 Safari/537.36"
+)
+
+FALLBACK_SAFARI_IOS_UA = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 "
+    "(KHTML, like Gecko) Version/26.6.2 Mobile/15E148 Safari/604.1"
 )
 
 # Cookies issued by Cloudflare; cleared before re-solving so stale clearances
@@ -121,26 +134,145 @@ def _chrome_user_agent() -> str:
     return FALLBACK_CHROME_UA
 
 
-def _make_chrome_tls_context() -> utls.SSLContext:
-    """BoringSSL context impersonating the latest stable Chrome on the wire."""
+def _is_safari_ua(user_agent: str | None) -> bool:
+    """True when `user_agent` identifies a WebKit/Safari browser rather than Chromium."""
+    if not user_agent or "Safari/" not in user_agent:
+        return False
+    return not any(
+        token in user_agent
+        for token in ("Chrome/", "Chromium/", "CriOS/", "FxiOS/", "Edg/", "OPR/")
+    )
+
+
+def _safari_ios_fingerprint(user_agent: str | None = None) -> utls.Fingerprint:
+    """TLS ClientHello + HTTP header order matching cfsolve's safari_ios_26.2 profile."""
+    ua = user_agent or FALLBACK_SAFARI_IOS_UA
+    return utls.Fingerprint(
+        cipher_suites=[
+            0x1302,  # TLS_AES_256_GCM_SHA384
+            0x1303,  # TLS_CHACHA20_POLY1305_SHA256
+            0x1301,  # TLS_AES_128_GCM_SHA256
+            0xC02C,  # ECDHE-ECDSA-AES256-GCM-SHA384
+            0xC02B,  # ECDHE-ECDSA-AES128-GCM-SHA256
+            0xCCA9,  # ECDHE-ECDSA-CHACHA20-POLY1305
+            0xC030,  # ECDHE-RSA-AES256-GCM-SHA384
+            0xC02F,  # ECDHE-RSA-AES128-GCM-SHA256
+            0xCCA8,  # ECDHE-RSA-CHACHA20-POLY1305
+            0xC00A,  # ECDHE-ECDSA-AES256-SHA
+            0xC009,  # ECDHE-ECDSA-AES128-SHA
+            0xC014,  # ECDHE-RSA-AES256-SHA
+            0xC013,  # ECDHE-RSA-AES128-SHA
+            0x009D,  # AES256-GCM-SHA384
+            0x009C,  # AES128-GCM-SHA256
+            0x0035,  # AES256-SHA
+            0x002F,  # AES128-SHA
+            0xC008,  # ECDHE-ECDSA-DES-CBC3-SHA
+            0xC012,  # ECDHE-RSA-DES-CBC3-SHA
+            0x000A,  # DES-CBC3-SHA
+        ],
+        extensions_order=[
+            Ext.server_name,
+            Ext.extended_master_secret,
+            Ext.renegotiation_info,
+            Ext.supported_groups,
+            Ext.ec_point_formats,
+            Ext.application_layer_protocol_negotiation,
+            Ext.status_request,
+            Ext.signature_algorithms,
+            Ext.signed_certificate_timestamp,
+            Ext.key_share,
+            Ext.psk_key_exchange_modes,
+            Ext.supported_versions,
+            Ext.compress_certificate,
+            Ext.GREASE,
+        ],
+        supported_groups=[
+            Group.X25519MLKEM768,
+            Group.X25519,
+            Group.secp256r1,
+            Group.secp384r1,
+            Group.secp521r1,
+        ],
+        key_shares=[Group.X25519MLKEM768, Group.X25519],
+        signature_algorithms=[
+            SigAlg.ecdsa_secp256r1_sha256,
+            SigAlg.rsa_pss_rsae_sha256,
+            SigAlg.rsa_pkcs1_sha256,
+            SigAlg.ecdsa_secp384r1_sha384,
+            SigAlg.rsa_pss_rsae_sha384,
+            SigAlg.rsa_pkcs1_sha384,
+            SigAlg.rsa_pss_rsae_sha512,
+            SigAlg.rsa_pkcs1_sha512,
+            SigAlg.rsa_pkcs1_sha1,
+        ],
+        alpn=["h2", "http/1.1"],
+        compress_certificate=["zlib"],
+        grease=True,
+        ech=False,
+        http_headers={
+            "Sec-Fetch-Dest": "document",
+            "User-Agent": ua,
+            "Upgrade-Insecure-Requests": "1",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-Mode": "navigate",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Priority": "u=0, i",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+        },
+    )
+
+
+def _apply_tls_fingerprint(
+    context: utls.SSLContext, user_agent: str | None = None
+) -> None:
+    """Configure `context` with a TLS + header fingerprint matching `user_agent`."""
+    if _is_safari_ua(user_agent):
+        context.set_fingerprint(_safari_ios_fingerprint(user_agent))
+    else:
+        context.set_fingerprint("chrome:stable")
+
+
+def _make_chrome_tls_context(user_agent: str | None = None) -> utls.SSLContext:
+    """BoringSSL context impersonating Chrome or Safari iOS on the wire."""
     context = utls.SSLContext(utls.PROTOCOL_TLS_CLIENT)
     context.load_default_certs()
-    context.set_fingerprint("chrome:stable")
+    _apply_tls_fingerprint(context, user_agent)
     return context
 
 
 class _ChromeTLSAdapter(HTTPAdapter):
-    """niquests adapter mounting a Chrome-impersonating utls TLS context.
+    """niquests adapter mounting a browser-impersonating utls TLS context.
 
     niquests has no public `ssl_context` option, so the context is injected
     into the connection pools here. urllib3-future automatically completes a
-    bare utls context with the chrome:stable fingerprint, and rewrites request
-    headers into Chrome's on-the-wire order (explicit headers keep their values).
+    bare utls context with the active fingerprint, and rewrites request
+    headers into that browser's on-the-wire order (explicit headers keep their
+    values).
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        self.tls_context = _make_chrome_tls_context()
+    def __init__(self, *args: Any, user_agent: str | None = None, **kwargs: Any) -> None:
+        self._current_ua: str | None = user_agent
+        self._is_safari: bool = _is_safari_ua(user_agent)
+        self.tls_context = _make_chrome_tls_context(user_agent)
         super().__init__(*args, **kwargs)
+
+    def sync_user_agent(self, user_agent: str | None) -> None:
+        """Align the TLS fingerprint and header bundle with `user_agent`."""
+        is_safari = _is_safari_ua(user_agent)
+        if is_safari == self._is_safari and (
+            not is_safari or user_agent == self._current_ua
+        ):
+            return
+        self._current_ua = user_agent
+        self._is_safari = is_safari
+        _apply_tls_fingerprint(self.tls_context, user_agent)
+        if hasattr(self, "poolmanager") and self.poolmanager is not None:
+            with contextlib.suppress(Exception):
+                self.poolmanager.clear()
+        for proxy_pool in getattr(self, "proxy_manager", {}).values():
+            with contextlib.suppress(Exception):
+                proxy_pool.clear()
 
     def init_poolmanager(self, *args: Any, **kwargs: Any) -> None:
         kwargs["ssl_context"] = self.tls_context
@@ -260,8 +392,6 @@ def _find_browser_binary() -> str | None:
     builds under their usual names and per-OS locations (Linux, macOS, Windows).
     Returns an executable path or None when nothing usable is installed.
     """
-    from shutil import which
-
     for name in _BROWSER_BINARY_NAMES:
         found = which(name)
         if found:
@@ -596,6 +726,274 @@ def _solve_via_nodriver(
     return user_agent, cookies
 
 
+# Binary names and default profile files used by cfsolve.
+_CFSOLVE_BINARY_NAMES = ("cfsolve", "challenge")
+_CFSOLVE_DEFAULT_PROFILE = "safari-26-ios.json"
+_CFSOLVE_PROFILE_BASE_URLS = (
+    "https://raw.githubusercontent.com/chris124567/cfsolve/master/profiles",
+    "https://raw.githubusercontent.com/chris124567/cfsolve/main/profiles",
+)
+_CFSOLVE_PROFILE_FILES = (
+    "safari-26-ios.json",
+    "safari-26-ios/answers.json",
+    "safari-26-ios/challenge-page-answers.json",
+)
+
+
+def _cfsolve_data_dir() -> Path:
+    return PlatformDirs(appname=PROG_NAME, appauthor=False).user_data_path / "cfsolve"
+
+
+def _find_cfsolve_binary(explicit_path: str | None = None) -> str | None:
+    """Locate the cfsolve (`challenge`) executable."""
+    if explicit_path:
+        expanded = Path(explicit_path).expanduser()
+        if expanded.is_dir():
+            for rel in (
+                "target/release/challenge",
+                "target/release/cfsolve",
+                "challenge",
+                "cfsolve",
+            ):
+                candidate = expanded / rel
+                if candidate.is_file() and os.access(candidate, os.X_OK):
+                    return str(candidate)
+            return None
+        if expanded.is_file() and os.access(expanded, os.X_OK):
+            return str(expanded)
+        found = which(explicit_path)
+        return found if found else None
+
+    for name in _CFSOLVE_BINARY_NAMES:
+        found = which(name)
+        if found:
+            return found
+
+    home = Path.home()
+    search_roots = (
+        home / ".local" / "bin",
+        home / ".cargo" / "bin",
+        _cfsolve_data_dir(),
+        home / ".local" / "share" / "cfsolve",
+        home / "cfsolve",
+        home / "code" / "cfsolve",
+        Path("/usr/local/bin"),
+    )
+    for root in search_roots:
+        for rel in (
+            "cfsolve",
+            "challenge",
+            "target/release/challenge",
+            "target/release/cfsolve",
+        ):
+            candidate = root / rel
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+    return None
+
+
+def _pick_profile_in_dir(directory: Path) -> str | None:
+    """Return `safari-26-ios.json` when present alongside its answer tables in `directory`."""
+    for sub in (directory, directory / "profiles"):
+        default = sub / _CFSOLVE_DEFAULT_PROFILE
+        if (
+            default.is_file()
+            and (sub / "safari-26-ios" / "answers.json").is_file()
+            and (sub / "safari-26-ios" / "challenge-page-answers.json").is_file()
+        ):
+            return str(default)
+    return None
+
+
+def _find_cfsolve_profile(
+    explicit_profile: str | None = None,
+    binary_path: str | None = None,
+) -> str | None:
+    """Locate an existing cfsolve browser fingerprint profile JSON on disk."""
+    if explicit_profile:
+        expanded = Path(explicit_profile).expanduser()
+        if expanded.is_file():
+            return str(expanded)
+        if expanded.is_dir():
+            return _pick_profile_in_dir(expanded)
+        return None
+
+    candidate_dirs: list[Path] = []
+    if binary_path:
+        bin_dir = Path(binary_path).resolve().parent
+        # Covers <repo>/challenge, <repo>/bin/challenge, and <repo>/target/release/challenge.
+        candidate_dirs.extend((bin_dir, bin_dir.parent, bin_dir.parent.parent))
+
+    home = Path.home()
+    candidate_dirs.extend(
+        (
+            _cfsolve_data_dir(),
+            home / ".config" / "pptu",
+            home / ".local" / "share" / "cfsolve",
+            home / "cfsolve",
+            home / "code" / "cfsolve",
+            Path("/usr/local/share/cfsolve"),
+        )
+    )
+    for directory in candidate_dirs:
+        if found := _pick_profile_in_dir(directory):
+            return found
+    return None
+
+
+def _ensure_cfsolve_profile(
+    explicit_profile: str | None = None,
+    binary_path: str | None = None,
+    proxy: str | None = None,
+) -> str | None:
+    """Locate a cfsolve profile on disk, or download and cache the default one."""
+    if found := _find_cfsolve_profile(explicit_profile, binary_path):
+        return found
+    if explicit_profile:
+        return None
+
+    profiles_dir = _cfsolve_data_dir() / "profiles"
+    proxies = {"all": proxy} if proxy else None
+    download_err: Exception | None = None
+
+    for base_url in _CFSOLVE_PROFILE_BASE_URLS:
+        try:
+            for rel in _CFSOLVE_PROFILE_FILES:
+                dest = profiles_dir / rel
+                if dest.is_file() and dest.stat().st_size > 0:
+                    continue
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                resp = niquests.get(
+                    f"{base_url}/{rel}",
+                    proxies=proxies,
+                    timeout=20,
+                )
+                resp.raise_for_status()
+                tmp_dest = dest.with_suffix(f"{dest.suffix}.tmp")
+                tmp_dest.write_bytes(resp.content or b"")
+                tmp_dest.replace(dest)
+            if verified := _pick_profile_in_dir(profiles_dir):
+                return verified
+        except Exception as e:
+            download_err = e
+            continue
+
+    if download_err is not None:
+        wprint(f"Could not download default cfsolve browser profile: {download_err}")
+    return _pick_profile_in_dir(profiles_dir)
+
+
+def _cfsolve_available(binary_path: str | None = None) -> bool:
+    """True when the cfsolve (`challenge`) binary is installed."""
+    return _find_cfsolve_binary(binary_path) is not None
+
+
+def _cfsolve_profile_ua(profile_path: str | Path) -> str | None:
+    """Read the User-Agent configured in a cfsolve profile JSON."""
+    with contextlib.suppress(Exception):
+        data = json.loads(Path(profile_path).read_text(encoding="utf-8"))
+        headers = data.get("transport", {}).get("headers", {})
+        if isinstance(headers, dict):
+            for key, value in headers.items():
+                if str(key).lower() == "user-agent" and isinstance(value, str) and value:
+                    return value
+    return None
+
+
+def _make_clearance_cookie(host: str, value: str) -> Cookie:
+    """Construct an http.cookiejar.Cookie for `cf_clearance` on `host`."""
+    clean_host = host.lstrip(".")
+    domain = f".{clean_host}" if clean_host else ""
+    rest: dict[str, Any] = {"HttpOnly": None}
+    return Cookie(
+        version=0,
+        name="cf_clearance",
+        value=value,
+        port=None,
+        port_specified=False,
+        domain=domain,
+        domain_specified=bool(domain),
+        domain_initial_dot=domain.startswith("."),
+        path="/",
+        path_specified=True,
+        secure=True,
+        expires=None,
+        discard=True,
+        comment=None,
+        comment_url=None,
+        rest=rest,
+        rfc2109=False,
+    )
+
+
+def _solve_via_cfsolve(
+    url: str,
+    *,
+    proxy: str | None = None,
+    binary_path: str | None = None,
+    profile_path: str | None = None,
+) -> tuple[str, list[Cookie]]:
+    """Solve the challenge headlessly via the external `cfsolve` (`challenge`) CLI."""
+    binary = _find_cfsolve_binary(binary_path)
+    if not binary:
+        raise CloudflareBlocked(
+            f"cfsolve binary not found{f' at {binary_path}' if binary_path else ''}."
+        )
+    profile = _ensure_cfsolve_profile(profile_path, binary, proxy=proxy)
+    if not profile:
+        raise CloudflareBlocked("cfsolve fingerprint profile JSON not available.")
+
+    host = urlparse(url).hostname or ""
+    user_agent = _cfsolve_profile_ua(profile) or FALLBACK_SAFARI_IOS_UA
+
+    with tempfile.TemporaryDirectory(prefix="pptu-cfsolve-") as tmp_dir:
+        session_dir = Path(tmp_dir) / "session"
+        cmd = [
+            binary,
+            "--page",
+            url,
+            str(session_dir),
+            "--solve",
+            "--fingerprint",
+            profile,
+        ]
+        if proxy:
+            cmd.extend(["--proxy", proxy])
+        try:
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=CFSOLVE_TIMEOUT,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise CloudflareBlocked(
+                f"cfsolve timed out after {CFSOLVE_TIMEOUT} seconds."
+            ) from e
+        except OSError as e:
+            raise CloudflareBlocked(f"Could not execute cfsolve ({binary}): {e}") from e
+
+    clearance = ""
+    for line in proc.stdout.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("cf_clearance="):
+            clearance = stripped.partition("=")[2].strip()
+            if clearance:
+                break
+
+    if proc.returncode != 0 or not clearance:
+        stderr_lines = [line.strip() for line in proc.stderr.splitlines() if line.strip()]
+        detail = (
+            stderr_lines[-1]
+            if stderr_lines
+            else (proc.stdout.strip() or f"exit code {proc.returncode}")
+        )
+        raise CloudflareBlocked(f"cfsolve failed: {detail}")
+
+    return user_agent, [_make_clearance_cookie(host, clearance)]
+
+
 def _manual_instructions(tracker: str, cookies_path: Path | str | None) -> str:
     location = cookies_path or "the tracker's cookie file"
     # xvfb only exists on Linux; on macOS/Windows there is always a display.
@@ -610,14 +1008,19 @@ def _manual_instructions(tracker: str, cookies_path: Path | str | None) -> str:
         "\n"
         "Pick ONE of the fixes below:\n"
         "\n"
-        "1. Built-in browser solver (desktop with a GUI):\n"
+        "1. Headless solver via cfsolve (no browser or GUI needed):\n"
+        "   cargo install --git https://github.com/chris124567/cfsolve --bin challenge\n"
+        "   (nothing to configure in config.toml; pptu auto-detects `challenge` and\n"
+        "   downloads its browser profile automatically)\n"
+        "\n"
+        "2. Built-in browser solver (desktop with a GUI, fallback):\n"
         "   pip install 'pptu[cloudflare]'   (or: pip install nodriver)\n"
         "   (needs a locally installed Chrome/Chromium; pptu briefly opens its own\n"
         "   browser to clear the check - nothing else to configure)\n"
         "   Browser not found or in a custom location (snap, flatpak, Brave, ...)?\n"
         f'   Add  browser_path = "{_example_browser_path()}"  to the [{tracker.lower()}] section.\n'
         "\n"
-        "2. Browser cookies (headless / CLI-only servers):\n"
+        "3. Browser cookies (headless / CLI-only servers):\n"
         "   a. On a machine with a browser, open the site and pass the Cloudflare check.\n"
         "   b. Export the site's cookies in Netscape cookies.txt format (must include\n"
         "      cf_clearance).\n"
@@ -674,12 +1077,13 @@ def _rewind_streams(positions: list[tuple[Any, int]]) -> None:
 class CFSession(niquests.Session):
     """Session for Cloudflare-protected trackers.
 
-    A niquests session riding a Chrome-impersonating utls TLS context that
-    transparently solves Cloudflare challenges (via a local Chrome driven by
-    the optional `nodriver` package, or with a browser-exported cf_clearance
-    cookie) and retries the original request. When no automatic solver is
-    available on an interactive run, it tells the user where to drop a cookie
-    file and waits for them before retrying.
+    A niquests session riding a browser-impersonating utls TLS context that
+    transparently solves Cloudflare challenges - trying `cfsolve` first for
+    fast headless solving, then falling back to a local Chrome driven by the
+    optional `nodriver` package, or a browser-exported cf_clearance cookie -
+    and retries the original request. When no automatic solver is available on
+    an interactive run, it tells the user where to drop a cookie file and waits
+    for them before retrying.
     """
 
     def __init__(
@@ -690,6 +1094,10 @@ class CFSession(niquests.Session):
         proxy: str | None = None,
         user_agent: str | None = None,
         browser_path: str | None = None,
+        cfsolve_path: str | None = None,
+        cfsolve_profile: str | None = None,
+        cf_solver: str | None = None,
+        use_cfsolve: bool = True,
         tracker_name: str = "tracker",
         twocaptcha_api_key: str | None = None,
         interactive: bool = True,
@@ -697,9 +1105,6 @@ class CFSession(niquests.Session):
     ) -> None:
         kwargs.setdefault("disable_http3", True)
         super().__init__(**kwargs)
-        self._adapter = _ChromeTLSAdapter(disable_http3=True)
-        self.mount("https://", self._adapter)
-        self.mount("http://", self._adapter)
         self._cookie_jar = cookie_jar
         if cookie_jar is not None:
             for cookie in cookie_jar:
@@ -709,21 +1114,48 @@ class CFSession(niquests.Session):
         self._tracker_name = tracker_name
         self._proxy = proxy
         self._browser_path = browser_path or None
+        self._cfsolve_path = cfsolve_path or None
+        self._cfsolve_profile = cfsolve_profile or None
         self._cookies_path = cookies_path
         self._twocaptcha_api_key = twocaptcha_api_key or None
         self._interactive = interactive
-        # cf_clearance is bound to the User-Agent that minted it. Prefer the
-        # explicit browser_ua, else the UA persisted from the last solve (so a
-        # cached clearance keeps matching on later runs instead of forcing a new
-        # solve), else the impersonated Chrome's UA.
-        self.headers.update(
-            {"User-Agent": user_agent or self._load_saved_ua() or _chrome_user_agent()}
-        )
+
+        solver_mode = (cf_solver or "auto").strip().lower()
+        if not use_cfsolve or solver_mode in ("browser", "nodriver", "chrome"):
+            self._allow_cfsolve = False
+            self._allow_browser = True
+        elif solver_mode in ("cfsolve", "headless"):
+            self._allow_cfsolve = True
+            self._allow_browser = False
+        elif solver_mode == "manual":
+            self._allow_cfsolve = False
+            self._allow_browser = False
+        else:  # "auto"
+            self._allow_cfsolve = True
+            self._allow_browser = True
+
+        saved_ua = self._load_saved_ua()
+        if not self._allow_cfsolve and _is_safari_ua(saved_ua):
+            # Switched to real browser mode: discard saved Safari UA and clearance
+            saved_ua = None
+            if cookies_path:
+                self._clear_cf_cookies()
+
+        # cf_clearance is bound to the User-Agent and TLS fingerprint that
+        # minted it. Prefer the explicit browser_ua, else the UA persisted from
+        # the last solve (so a cached clearance keeps matching on later runs
+        # instead of forcing a new solve), else the impersonated Chrome's UA.
+        initial_ua = user_agent or saved_ua or _chrome_user_agent()
+        self._adapter = _ChromeTLSAdapter(user_agent=initial_ua, disable_http3=True)
+        self.mount("https://", self._adapter)
+        self.mount("http://", self._adapter)
+        self.headers.update({"User-Agent": initial_ua})
 
     def request(self, method: Any, url: str, **kwargs: Any) -> niquests.Response:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         stream_positions = _get_stream_positions(kwargs)
         transient_retries = 0
         challenge_solves = 0
+        cfsolve_attempted = False
         while True:
             try:
                 response = super().request(method, url, **kwargs)
@@ -747,7 +1179,12 @@ class CFSession(niquests.Session):
                     raise CloudflareBlocked(
                         _manual_instructions(self._tracker_name, self._cookies_path)
                     )
-                self._solve_challenge(response, request_url=url)
+                if self._solve_challenge(
+                    response,
+                    request_url=url,
+                    allow_cfsolve=not cfsolve_attempted,
+                ):
+                    cfsolve_attempted = True
                 _rewind_streams(stream_positions)
                 continue
 
@@ -763,12 +1200,49 @@ class CFSession(niquests.Session):
             return response
 
     def _solve_challenge(
-        self, response: niquests.Response, request_url: str = ""
-    ) -> None:
+        self,
+        response: niquests.Response,
+        request_url: str = "",
+        *,
+        allow_cfsolve: bool = True,
+    ) -> bool:
+        """Solve a Cloudflare challenge. Returns True when solved via cfsolve."""
         target = _challenge_target_url(str(response.url or request_url))
         target_host = urlparse(target).hostname or ""
+        cfsolve_error: Exception | None = None
 
-        if _internal_solver_available():
+        if (
+            self._allow_cfsolve
+            and allow_cfsolve
+            and (
+                self._cfsolve_path
+                or self._cfsolve_profile
+                or _cfsolve_available(self._cfsolve_path)
+            )
+        ):
+            wprint("Cloudflare challenge detected, solving headlessly with cfsolve...")
+            self._clear_cf_cookies(target_host)
+            try:
+                user_agent, cookies = _solve_via_cfsolve(
+                    target,
+                    proxy=self._proxy,
+                    binary_path=self._cfsolve_path,
+                    profile_path=self._cfsolve_profile,
+                )
+            except Exception as e:
+                cfsolve_error = e
+                if self._allow_browser and _internal_solver_available():
+                    wprint(
+                        f"cfsolve could not clear the challenge ({e}), "
+                        "falling back to the built-in browser solver..."
+                    )
+                else:
+                    wprint(f"cfsolve could not clear the challenge: {e}")
+            else:
+                self._apply_solution(user_agent, cookies)
+                return True
+
+        if self._allow_browser and _internal_solver_available():
             wprint(
                 "Cloudflare challenge detected, solving with the built-in browser "
                 "(if it shows a 'Verify you are human' checkbox, click it)..."
@@ -790,24 +1264,27 @@ class CFSession(niquests.Session):
                     f"{_manual_instructions(self._tracker_name, self._cookies_path)}"
                 ) from e
             self._apply_solution(user_agent, cookies)
-            return
+            return False
 
-        # No automatic solver: on an interactive run, let the user drop in an
-        # exported cookie file at the login path and retry; otherwise give up
-        # with the setup instructions.
+        # No automatic solver succeeded: on an interactive run, let the user
+        # drop in an exported cookie file at the login path and retry;
+        # otherwise give up with the setup instructions.
         if self._prompt_for_cookies(target_host):
-            return
+            return False
+        prefix = f"{cfsolve_error}\n\n" if cfsolve_error is not None else ""
         raise CloudflareBlocked(
-            _manual_instructions(self._tracker_name, self._cookies_path)
+            f"{prefix}{_manual_instructions(self._tracker_name, self._cookies_path)}"
         )
 
     def _apply_solution(self, user_agent: str, cookies: list[Cookie]) -> None:
-        """Inject solver results (cookies + User-Agent) and persist them."""
+        """Inject solver results (cookies + User-Agent + TLS profile) and persist them."""
         if user_agent:
-            # cf_clearance is bound to the User-Agent of the solver - use it from
-            # now on or the next request gets challenged again, and persist it so
-            # later runs reuse the cached clearance instead of re-solving.
+            # cf_clearance is bound to the User-Agent and TLS fingerprint of the
+            # solver - use them from now on or the next request gets challenged
+            # again, and persist the UA so later runs reuse the cached clearance
+            # instead of re-solving.
             self.headers.update({"User-Agent": user_agent})
+            self._adapter.sync_user_agent(user_agent)
             self._save_ua(user_agent)
 
         has_clearance = False
@@ -898,6 +1375,7 @@ class CFSession(niquests.Session):
             return False
         if user_agent:
             self.headers.update({"User-Agent": user_agent})
+            self._adapter.sync_user_agent(user_agent)
             self._save_ua(user_agent)
         return self._reload_cookies(target_host)
 

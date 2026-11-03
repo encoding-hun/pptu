@@ -86,6 +86,12 @@ CONTEXT_SETTINGS = Context.settings(
     help="Run non-interactively (never prompt).",
 )
 @cloup.option(
+    "--cf-solver",
+    type=cloup.Choice(["auto", "cfsolve", "browser", "manual"], case_sensitive=False),
+    default=None,
+    help="Cloudflare solver: 'auto' (cfsolve then browser), 'browser' (real browser only), or 'manual'.",
+)
+@cloup.option(
     "-ds",
     "--disable-snapshots",
     is_flag=True,

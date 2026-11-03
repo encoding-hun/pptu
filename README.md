@@ -5,6 +5,7 @@
 - Python 3.10 to 3.13
 - Python package dependencies (`uv sync --frozen` – requires uv 0.8.0 or newer – or `pip install .`)
 - torrenttools (for creating torrents, optional)
+- [cfsolve](https://github.com/chris124567/cfsolve) (for headless Cloudflare solving, optional)
 - MediaInfo CLI (for generating tech info)
 - FFmpeg (for generating snapshots)
 
@@ -100,9 +101,20 @@ For sites with captcha, a 2captcha API key is required to solve the captcha. Man
 
 ### Cloudflare-protected trackers
 
-Some trackers (currently HDBits) sit behind a Cloudflare managed challenge that only a real, windowed browser can pass (headless browsers are detected and fail). The challenge yields a `cf_clearance` cookie that is bound to your IP and User-Agent. Settings go in the tracker's own config section (`[hdbits]` below).
+Some trackers (currently HDBits) sit behind a Cloudflare managed challenge. The challenge yields a `cf_clearance` cookie that is bound to your IP, User-Agent, and TLS fingerprint. Settings go in the tracker's own config section (`[hdbits]` below).
 
-**Desktop: built-in browser solver (automatic)**
+By default (`cf_solver = "auto"`), pptu tries the headless `cfsolve` solver first, and automatically falls back to the real browser solver (`nodriver`) or manual cookies if needed. You can skip `cfsolve` and force the real browser solver at any time by setting `cf_solver = "browser"` (or `cfsolve = false`) under `[hdbits]` in `config.toml`, or passing `--cf-solver browser` on the command line.
+
+**Primary: headless solver via `cfsolve` (no browser or GUI needed)**
+
+- Install [`cfsolve`](https://github.com/chris124567/cfsolve) (requires `cmake` and `libclang`, e.g. `sudo dnf install cmake clang-devel` on Fedora or `sudo apt install cmake libclang-dev` on Debian/Ubuntu):
+  ```shell
+  cargo install --git https://github.com/chris124567/cfsolve --bin challenge
+  ```
+- No config paths are needed: pptu automatically finds the `challenge` binary on your `PATH` (or `~/.cargo/bin`) and automatically downloads and caches the browser profile into `~/.local/share/pptu/cfsolve/profiles/` on first use.
+- If `cfsolve` fails or its clearance is rejected, pptu automatically falls back to the browser solver or manual cookies below.
+
+**Fallback 1: built-in browser solver (desktop with a GUI)**
 
 - Install the extra: `pip install 'pptu[cloudflare]'` (or `pip install nodriver`). It needs Chrome, Chromium, Edge or Brave installed.
 - pptu briefly opens the browser, clears the check, and stores the clearance and the browser's User-Agent next to the tracker's cookies. Later runs reuse them until they expire.
@@ -110,7 +122,7 @@ Some trackers (currently HDBits) sit behind a Cloudflare managed challenge that 
 - On a Linux server with a browser but no display, run `xvfb-run pptu ...`.
 - If Cloudflare shows a "Verify you are human" checkbox, click it in the opened window. For unattended runs (`--auto`, watch folders), set `2captcha_api_key` (the same key AvistaZ uses) instead: when the browser hasn't passed after 15 seconds, pptu has 2captcha solve the Turnstile check and hands the token back to the page, so no click is needed.
 
-**Headless / CLI-only servers: exported cookies**
+**Fallback 2: exported cookies (headless / CLI-only servers without `cfsolve`)**
 
 1. On a machine with a browser on the same network (same IP / VPN exit), pass the check on the tracker's site and export its cookies as Netscape `cookies.txt` (must include `cf_clearance`).
 2. Save them as the tracker's cookie file in pptu's cookies directory (`~/.local/share/pptu/cookies/` on Linux): `<tracker>.txt` (e.g. `hdb.txt`), or `<tracker>_<sha1 of your username>.txt` if a `username` is set. No username or password is needed for this.
@@ -162,6 +174,7 @@ Options:
    --fast-upload / --no-fast-upload   Upload only after all steps succeed (or force-disable).
    -c, --confirm                      Ask for confirmation before uploading.
    -a, --auto                         Run non-interactively (never prompt).
+   --cf-solver [auto|browser|...]     Cloudflare solver: auto, browser, cfsolve, manual.
    -ds, --disable-snapshots           Skip creating description snapshots.
    -s, --skip-upload                  Create torrents but don't upload.
    -n, --note TEXT                    Note to attach to the upload.

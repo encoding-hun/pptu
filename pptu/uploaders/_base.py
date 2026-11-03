@@ -49,15 +49,29 @@ class Uploader(ABC):
         if self.cloudflare_bypass:
             from pptu.utils.cloudflare import CFSession
 
+            parent_params = ctx.parent.params if ctx.parent and ctx.parent.params else {}
+            cli_cf_solver = parent_params.get("cf_solver")
+            config_cf_solver = self.config.get(self, "cf_solver") or self.config.get(
+                self, "solver"
+            )
+            raw_cfsolve = self.config.get(self, "cfsolve")
+            if raw_cfsolve is None:
+                raw_cfsolve = self.config.get(self, "use_cfsolve")
+            use_cfsolve = True if raw_cfsolve is None else bool(raw_cfsolve)
+
             self.session = CFSession(
                 cookie_jar=self.cookie_jar,
                 cookies_path=self.cookies_path,
                 proxy=self.config.get(self, "proxy") or None,
                 user_agent=self.config.get(self, "browser_ua") or None,
                 browser_path=self.config.get(self, "browser_path") or None,
+                cfsolve_path=self.config.get(self, "cfsolve_path") or None,
+                cfsolve_profile=self.config.get(self, "cfsolve_profile") or None,
+                cf_solver=cli_cf_solver or config_cf_solver or None,
+                use_cfsolve=use_cfsolve,
                 twocaptcha_api_key=self.config.get(self, "2captcha_api_key") or None,
                 tracker_name=self.cli.name,
-                interactive=not bool(ctx.parent.params.get("auto")),
+                interactive=not bool(parent_params.get("auto")),
             )
         else:
             self.session = niquests.Session(disable_http3=True)
