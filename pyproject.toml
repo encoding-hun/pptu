@@ -38,7 +38,7 @@ dependencies = [
     "orjson>=3.11.3",
     "beaupy>=3.10.2",
     "language-data>=1.3.0",
-    "pymal-ng>=1.0.0",
+    "pymal-ng>=2.0.0",
 ]
 
 
