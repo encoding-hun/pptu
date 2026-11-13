@@ -1296,7 +1296,7 @@ wheels = [
 
 [[package]]
 name = "pptu"
-version = "2026.11.3"
+version = "2026.11.13"
 source = { editable = "." }
 default-groups = ["cloudflare", "dev"]
 dependencies = [
