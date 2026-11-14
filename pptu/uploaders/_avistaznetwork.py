@@ -83,10 +83,6 @@ class AvistaZNetwork(Uploader, ABC):
         return f"https://{self.domain}"
 
     @property
-    def exclude_regex(self) -> str:
-        return r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
-
-    @property
     def announce_url(self) -> str:
         return f"https://tracker.{self.domain}/{{passkey}}/announce"
 

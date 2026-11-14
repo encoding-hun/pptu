@@ -34,6 +34,19 @@ if TYPE_CHECKING:
     from pptu.uploaders import Uploader
 
 
+# Never put in torrents; mkbrr and imdl skip (some of) these on their own, so
+# torf has to as well for a torrent made by one to be reusable by the other
+JUNK_FILES = ("thumbs.db", "ehthumbs.db", "desktop.ini")
+JUNK_DIR = "@eadir"
+
+
+def _ci_glob(text: str) -> str:
+    """Case-insensitive glob for imdl, e.g. "nfo" -> "[nN][fF][oO]"."""
+    return "".join(
+        f"[{c.lower()}{c.upper()}]" if c.isalpha() else glob.escape(c) for c in text
+    )
+
+
 class PPTU:
     def __init__(
         self,
@@ -73,6 +86,12 @@ class PPTU:
 
     def create_torrent(self) -> bool:
         torrent_creator: str = self.config.get("default", "torrent_creator", "torf")
+        if torrent_creator not in ("torf", "mkbrr", "imdl"):
+            eprint(
+                f"Invalid torrent creator: {torrent_creator} (use torf, mkbrr or imdl)",
+                fatal=True,
+            )
+
         announce_url: list[str] = as_list(self.tracker.announce_url)
 
         passkey = self.config.get(self.tracker, "passkey") or self.tracker.passkey
@@ -100,131 +119,148 @@ class PPTU:
         if self.torrent_path.exists():
             return True
 
-        base_torrent_path = next(iter(self.cache_dir.glob(cached)), None)
-
         if isinstance(self.tracker.randomize_infohash, bool):
             randomize_infohash = self.tracker.randomize_infohash
         else:
             randomize_infohash = not self.tracker.source
 
+        exts = self.tracker.exclude_exts
+        # torf is also used, whatever the creator, to list the files and to reuse
+        # hashes from another tracker's torrent of the same content
+        torrent = Torrent(
+            self.path,
+            trackers=announce_url,
+            private=True if self.tracker.private else None,
+            source=self.tracker.source,
+            created_by=None,
+            creation_date=None,
+            randomize_infohash=randomize_infohash,
+            exclude_regexs=[
+                rf"(?i)\.({'|'.join(map(re.escape, exts))})$",
+                rf"(?i)(^|[/\\])({'|'.join(map(re.escape, JUNK_FILES))})$",
+                rf"(?i)[/\\]{re.escape(JUNK_DIR)}[/\\]",
+            ],
+        )
+        if not torrent.size:
+            eprint(f"No files to include in the torrent for [cyan]{self.path}[/].")
+            return False
+
+        if base_torrent_path := next(iter(self.cache_dir.glob(cached)), None):
+            try:
+                reused = torrent.reuse(base_torrent_path)
+            except torf.TorfError as e:
+                wprint(f"Could not reuse {base_torrent_path.name} ({e}), recreating")
+            else:
+                if reused:
+                    torrent.write(self.torrent_path)
+                    return True
+
+        # ~1500 pieces, between 256 KiB and 16 MiB
+        exponent = max(18, min(24, round(math.log2(torrent.size / 1500))))
+
         if torrent_creator == "torf":
-            piece_size = 2**18
+            torrent.piece_size = 2**exponent
+            print()
+            with Progress(
+                BarColumn(),
+                CustomTransferSpeedColumn(),
+                TaskProgressColumn(),
+                TimeRemainingColumn(elapsed_when_finished=True),
+            ) as progress:
+                files = []
 
-            if self.path.is_file():
-                total_bytes = self.path.stat().st_size
-            else:
-                total_bytes = sum(
-                    f.stat().st_size for f in self.path.rglob("*") if f.is_file()
-                )
-
-            target_pieces = 1500
-            exponent = max(18, min(24, round(math.log2(total_bytes / target_pieces))))
-            piece_size = 2**exponent
-
-            torrent = Torrent(
-                self.path,
-                trackers=announce_url,
-                private=True if self.tracker.private else None,
-                source=self.tracker.source,
-                created_by=None,
-                creation_date=None,
-                piece_size=piece_size,
-                randomize_infohash=randomize_infohash,
-                exclude_regexs=[self.tracker.exclude_regex],
-            )
-
-            if base_torrent_path:
-                torrent.reuse(base_torrent_path)
-                try:
-                    torrent.validate()
-                except torf.MetainfoError:
-                    wprint("Torrent file is invalid, recreating")
-                else:
-                    torrent.trackers = announce_url
-                    torrent.randomize_infohash = randomize_infohash
-                    torrent.source = self.tracker.source
-                    torrent.private = True if self.tracker.private else None
-                    torrent.write(self.torrent_path)
-            else:
-                print()
-                with Progress(
-                    BarColumn(),
-                    CustomTransferSpeedColumn(),
-                    TaskProgressColumn(),
-                    TimeRemainingColumn(elapsed_when_finished=True),
-                ) as progress:
-                    files = []
-
-                    def update_progress(
-                        torrent: Torrent,
-                        filepath: str,
-                        pieces_done: int,
-                        pieces_total: int,
-                    ) -> None:
-                        if filepath not in files:
-                            progress.console.print(
-                                f"[bold white]Hashing [not bold white]{Path(filepath).name}..."
-                            )
-                            files.append(filepath)
-
-                        progress.update(
-                            task,
-                            completed=pieces_done * torrent.piece_size,
-                            total=pieces_total * torrent.piece_size,
+                def update_progress(
+                    torrent: Torrent,
+                    filepath: str,
+                    pieces_done: int,
+                    pieces_total: int,
+                ) -> None:
+                    if filepath not in files:
+                        progress.console.print(
+                            f"[bold white]Hashing [not bold white]{Path(filepath).name}..."
                         )
+                        files.append(filepath)
 
-                    task = progress.add_task(description="")
-                    torrent.generate(callback=update_progress)
-                    torrent.write(self.torrent_path)
+                    progress.update(
+                        task,
+                        completed=pieces_done * torrent.piece_size,
+                        total=pieces_total * torrent.piece_size,
+                    )
 
+                task = progress.add_task(description="")
+                torrent.generate(callback=update_progress)
+                torrent.write(self.torrent_path)
             return True
-        elif torrent_creator == "torrenttools":
-            if not (executable := which("torrenttools")):
-                eprint("torrenttools not found in PATH", fatal=True)
 
-            if base_torrent_path:
-                subprocess.run(
-                    [
-                        executable,
-                        "edit",
-                        "--no-created-by",
-                        "--no-creation-date",
-                        *([arg for x in announce_url for arg in ("-a", x)]),
-                        *(["-s", self.tracker.source] if self.tracker.source else []),
-                        "--private",
-                        ["off", "on"][self.tracker.private],
-                        "--output",
-                        self.torrent_path,
-                        base_torrent_path,
-                    ],
-                    check=True,
-                )
-            else:
-                subprocess.run(
-                    [
-                        executable,
-                        "create",
-                        "--no-created-by",
-                        "--no-creation-date",
-                        "--no-cross-seed",
-                        "--exclude",
-                        r".*\.(ffindex|jpg|nfo|png|srt|torrent|txt)$",
-                        *([arg for x in announce_url for arg in ("-a", x)]),
-                        *(["-s", self.tracker.source] if self.tracker.source else []),
-                        "--private",
-                        ["off", "on"][self.tracker.private],
-                        "--piece-size",
-                        "16M",
-                        "--output",
-                        self.torrent_path,
-                        self.path,
-                    ],
-                    check=True,
-                )
+        if not (executable := which(torrent_creator)):
+            eprint(f"{torrent_creator} not found in PATH", fatal=True)
 
-            return self.torrent_path.exists()
+        if torrent_creator == "mkbrr":
+            cmd = [
+                executable,
+                "create",
+                self.path,
+                *(arg for url in announce_url for arg in ("-t", url)),
+                *(["-s", self.tracker.source] if self.tracker.source else []),
+                f"--private={'true' if self.tracker.private else 'false'}",
+                "-l",
+                str(exponent),
+                "--no-date",
+                "--no-creator",
+                *(["--entropy"] if randomize_infohash else []),
+                # mkbrr skips JUNK_* itself and matches case-insensitively, but
+                # unlike torf and imdl it keeps hidden files
+                "--exclude",
+                ",".join([".*", *(f"*.{x}" for x in exts)]),
+                "--skip-prefix",
+                "-o",
+                self.torrent_path,
+            ]
         else:
-            eprint(f"Invalid torrent creator: {torrent_creator}", fatal=True)
+            cmd = [
+                executable,
+                "torrent",
+                "create",
+                "--input",
+                self.path,
+                "--output",
+                self.torrent_path,
+                "--force",
+                *(["--announce", announce_url[0]] if announce_url else []),
+                *(
+                    arg
+                    for url in (announce_url if len(announce_url) > 1 else [])
+                    for arg in ("--announce-tier", url)
+                ),
+                *(["--source", self.tracker.source] if self.tracker.source else []),
+                *(["--private"] if self.tracker.private else []),
+                "--piece-length",
+                str(2**exponent),
+                "--no-created-by",
+                "--no-creation-date",
+                *(
+                    arg
+                    for pattern in (
+                        *(f"!*.{_ci_glob(x)}" for x in exts),
+                        *(f"!**/{_ci_glob(x)}" for x in JUNK_FILES),
+                        f"!**/{_ci_glob(JUNK_DIR)}/**",
+                    )
+                    for arg in ("--glob", pattern)
+                ),
+            ]
+
+        print()
+        if subprocess.run(cmd).returncode or not self.torrent_path.exists():
+            eprint(f"{torrent_creator} failed to create the torrent.")
+            return False
+
+        if torrent_creator == "imdl" and randomize_infohash:
+            # imdl has no option for this
+            created = Torrent.read(self.torrent_path)
+            created.randomize_infohash = True
+            created.write(self.torrent_path, overwrite=True)
+
+        return True
 
     def get_mediainfo(self) -> str | list[str]:
         mediainfo_path: Path = self.cache_dir / "mediainfo.txt"

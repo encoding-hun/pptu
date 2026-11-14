@@ -328,10 +328,6 @@ class nekoBT(Uploader):
         return default_t
 
     @property
-    def exclude_regex(self) -> str:
-        return r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
-
-    @property
     def passkey(self) -> str | None:
         if self.watch_dir:
             try:

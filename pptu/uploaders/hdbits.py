@@ -117,10 +117,6 @@ class HDBits(Uploader):
         return "https://tracker.hdbits.org/announce.php"
 
     @property
-    def exclude_regex(self) -> str:
-        return r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
-
-    @property
     def passkey(self) -> str | None:
         if (res := self.session.get("https://hdbits.org/").text) and (
             m := re.search(r"passkey=([a-f0-9]+)", res)

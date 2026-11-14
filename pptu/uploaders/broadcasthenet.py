@@ -150,10 +150,6 @@ class BroadcasTheNet(Uploader):
         return "https://landof.tv/{passkey}/announce"
 
     @property
-    def exclude_regex(self) -> str:
-        return r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
-
-    @property
     def passkey(self) -> str | None:
         if res := self.session.get("https://backup.landof.tv/upload.php").text:
             soup = load_html(res)

@@ -85,10 +85,6 @@ class PassThePopcorn(Uploader):
         return "http://please.passthepopcorn.me:2710/{passkey}/announce"  # HTTPS tracker cert is expired
 
     @property
-    def exclude_regex(self) -> str:
-        return r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
-
-    @property
     def passkey(self) -> str | None:
         if res := self.session.get("https://passthepopcorn.me/upload.php").text:
             soup = load_html(res)

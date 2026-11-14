@@ -25,6 +25,16 @@ class Uploader(ABC):
     needs_login: bool = True
     private: bool = True
     randomize_infohash: bool | None = None
+    # Extensions of files left out of created torrents (case-insensitive)
+    exclude_exts: tuple[str, ...] = (
+        "ffindex",
+        "jpg",
+        "png",
+        "srt",
+        "nfo",
+        "torrent",
+        "txt",
+    )
     # Route the session through a Cloudflare-bypassing client
     cloudflare_bypass: bool = False
 
@@ -122,11 +132,6 @@ class Uploader(ABC):
     @abstractmethod
     def announce_url(self) -> list[str] | str:
         """Announce URL of the tracker. May include {passkey} variable."""
-
-    @property
-    @abstractmethod
-    def exclude_regex(self) -> str:
-        """Torrent excluded file of the tracker."""
 
     @property
     def passkey(self) -> str | None:

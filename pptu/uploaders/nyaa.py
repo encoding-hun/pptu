@@ -296,10 +296,6 @@ class Nyaa(Uploader):
             return list(external_t)
         return self.default_announces
 
-    @property
-    def exclude_regex(self) -> str:
-        return r".*\.(ffindex|jpg|png|srt|nfo|torrent|txt)$"
-
     def prepare(
         self,
         path: Path,

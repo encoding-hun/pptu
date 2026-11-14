@@ -4,7 +4,7 @@
 
 - Python 3.10 to 3.13
 - Python package dependencies (`uv sync --frozen` – requires uv 0.8.0 or newer – or `pip install .`)
-- torrenttools (for creating torrents, optional)
+- [mkbrr](https://github.com/autobrr/mkbrr) or [intermodal (imdl)](https://github.com/casey/intermodal) (faster torrent creation, optional; torf is used by default)
 - [cfsolve](https://github.com/chris124567/cfsolve) (for headless Cloudflare solving, optional)
 - MediaInfo CLI (for generating tech info)
 - FFmpeg (for generating snapshots)

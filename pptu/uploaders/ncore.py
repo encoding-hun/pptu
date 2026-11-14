@@ -26,6 +26,7 @@ from pptu.utils.xml import load_html
 
 class nCore(Uploader):
     source = "ncore.pro"
+    exclude_exts = ("ffindex", "jpg", "png", "torrent", "txt")
     min_snapshots: int = 3
     snapshots_plus: int = 3
 
@@ -70,10 +71,6 @@ class nCore(Uploader):
             "https://t.ncore.sh:2810/{passkey}/announce",
             "https://t.ncore.pro:2810/{passkey}/announce",
         ]
-
-    @property
-    def exclude_regex(self) -> str:
-        return r".*\.(ffindex|jpg|png|torrent|txt)$"
 
     @property
     def passkey(self) -> str | None:
