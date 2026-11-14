@@ -428,7 +428,9 @@ def _no_browser_message(start_error: Exception) -> str:
         f"({start_error})\n"
         f"{install}\n"
         "Already installed somewhere custom? Set it in the tracker's config.toml section:\n"
-        f'  browser_path = "{_example_browser_path()}"'
+        f'  browser_path = "{_example_browser_path()}"\n'
+        "No browser at all (e.g. a server)? Install the headless solver cfsolve instead:\n"
+        f"  {CFSOLVE_INSTALL_CMD}"
     )
 
 
@@ -727,7 +729,14 @@ def _solve_via_nodriver(
 
 
 # Binary names and default profile files used by cfsolve.
-_CFSOLVE_BINARY_NAMES = ("cfsolve", "challenge")
+_CFSOLVE_BINARY_NAMES = ("cfsolve", "cfsolver", "challenge")
+_CFSOLVE_RELATIVE_PATHS = (
+    *_CFSOLVE_BINARY_NAMES,
+    *(f"target/release/{name}" for name in _CFSOLVE_BINARY_NAMES),
+)
+CFSOLVE_INSTALL_CMD = (
+    "cargo install --git https://github.com/chris124567/cfsolve --bin challenge"
+)
 _CFSOLVE_DEFAULT_PROFILE = "safari-26-ios.json"
 _CFSOLVE_PROFILE_BASE_URLS = (
     "https://raw.githubusercontent.com/chris124567/cfsolve/master/profiles",
@@ -749,12 +758,7 @@ def _find_cfsolve_binary(explicit_path: str | None = None) -> str | None:
     if explicit_path:
         expanded = Path(explicit_path).expanduser()
         if expanded.is_dir():
-            for rel in (
-                "target/release/challenge",
-                "target/release/cfsolve",
-                "challenge",
-                "cfsolve",
-            ):
+            for rel in _CFSOLVE_RELATIVE_PATHS:
                 candidate = expanded / rel
                 if candidate.is_file() and os.access(candidate, os.X_OK):
                     return str(candidate)
@@ -780,12 +784,7 @@ def _find_cfsolve_binary(explicit_path: str | None = None) -> str | None:
         Path("/usr/local/bin"),
     )
     for root in search_roots:
-        for rel in (
-            "cfsolve",
-            "challenge",
-            "target/release/challenge",
-            "target/release/cfsolve",
-        ):
+        for rel in _CFSOLVE_RELATIVE_PATHS:
             candidate = root / rel
             if candidate.is_file() and os.access(candidate, os.X_OK):
                 return str(candidate)
@@ -1009,7 +1008,7 @@ def _manual_instructions(tracker: str, cookies_path: Path | str | None) -> str:
         "Pick ONE of the fixes below:\n"
         "\n"
         "1. Headless solver via cfsolve (no browser or GUI needed):\n"
-        "   cargo install --git https://github.com/chris124567/cfsolve --bin challenge\n"
+        f"   {CFSOLVE_INSTALL_CMD}\n"
         "   (nothing to configure in config.toml; pptu auto-detects `challenge` and\n"
         "   downloads its browser profile automatically)\n"
         "\n"
@@ -1116,6 +1115,7 @@ class CFSession(niquests.Session):
         self._browser_path = browser_path or None
         self._cfsolve_path = cfsolve_path or None
         self._cfsolve_profile = cfsolve_profile or None
+        self._cfsolve_missing_warned = False
         self._cookies_path = cookies_path
         self._twocaptcha_api_key = twocaptcha_api_key or None
         self._interactive = interactive
@@ -1211,15 +1211,22 @@ class CFSession(niquests.Session):
         target_host = urlparse(target).hostname or ""
         cfsolve_error: Exception | None = None
 
-        if (
-            self._allow_cfsolve
-            and allow_cfsolve
-            and (
-                self._cfsolve_path
-                or self._cfsolve_profile
-                or _cfsolve_available(self._cfsolve_path)
-            )
+        use_cfsolve = self._allow_cfsolve and allow_cfsolve
+        if use_cfsolve and not (
+            self._cfsolve_path
+            or self._cfsolve_profile
+            or _cfsolve_available(self._cfsolve_path)
         ):
+            use_cfsolve = False
+            if not self._cfsolve_missing_warned:
+                self._cfsolve_missing_warned = True
+                wprint(
+                    "Cloudflare challenge detected, but the headless solver cfsolve is "
+                    f"not installed. Install it with `{CFSOLVE_INSTALL_CMD}` (or set "
+                    "cfsolve_path in the tracker's config.toml section)."
+                )
+
+        if use_cfsolve:
             wprint("Cloudflare challenge detected, solving headlessly with cfsolve...")
             self._clear_cf_cookies(target_host)
             try:
