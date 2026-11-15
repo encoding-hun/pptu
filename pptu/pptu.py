@@ -254,10 +254,17 @@ class PPTU:
             eprint(f"{torrent_creator} failed to create the torrent.")
             return False
 
-        if torrent_creator == "imdl" and randomize_infohash:
-            # imdl has no option for this
+        # Match what torf (and so a reused torrent) writes, or the infohash differs
+        # for the same content: imdl can't add entropy, and mkbrr writes
+        # `private: 0` for public torrents instead of leaving the key out
+        fix_entropy = torrent_creator == "imdl" and randomize_infohash
+        fix_private = torrent_creator == "mkbrr" and not self.tracker.private
+        if fix_entropy or fix_private:
             created = Torrent.read(self.torrent_path)
-            created.randomize_infohash = True
+            if fix_entropy:
+                created.randomize_infohash = True
+            if fix_private:
+                created.private = None
             created.write(self.torrent_path, overwrite=True)
 
         return True
