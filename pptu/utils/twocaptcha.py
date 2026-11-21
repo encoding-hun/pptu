@@ -6,6 +6,7 @@ from typing import Any
 import niquests
 
 from pptu import __version__
+from pptu.utils import proxy
 
 SUBMIT_URL = "https://2captcha.com/in.php"
 RESULT_URL = "https://2captcha.com/res.php"
@@ -21,13 +22,14 @@ class TwoCaptchaError(RuntimeError):
 
 def _call(method: str, url: str, **kwargs: Any) -> dict[str, Any]:
     try:
-        response = niquests.request(
-            method,
-            url,
-            headers={"User-Agent": f"pptu/{__version__}"},
-            timeout=REQUEST_TIMEOUT,
-            **kwargs,
-        )
+        with proxy.session() as session:
+            response = session.request(
+                method,
+                url,
+                headers={"User-Agent": f"pptu/{__version__}"},
+                timeout=REQUEST_TIMEOUT,
+                **kwargs,
+            )
         data: dict[str, Any] = response.json()
     except (niquests.exceptions.RequestException, ValueError) as e:
         raise TwoCaptchaError(f"2captcha request failed: {e}") from e

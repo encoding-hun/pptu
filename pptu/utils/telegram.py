@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import niquests
-
+from pptu.utils import proxy
 from pptu.utils.log import wprint
 
 
@@ -33,7 +32,7 @@ def send_telegram_message(
         return False
 
     try:
-        with niquests.Session(retries=5, disable_http3=True) as client:
+        with proxy.session(retries=5) as client:
             res = client.post(
                 url=f"https://api.telegram.org/bot{tg_token}/sendMessage",
                 params={

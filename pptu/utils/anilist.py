@@ -5,7 +5,7 @@ from typing import Any
 import niquests
 from guessit import guessit
 
-from pptu.utils import similar
+from pptu.utils import proxy, similar
 from pptu.utils.collections import first_or_else, first_or_none
 from pptu.utils.log import wprint
 from pptu.utils.regex import find
@@ -124,7 +124,7 @@ def get_anilist_data(search_name: str = "", anilist_url: str = "") -> dict[str, 
         return {}
 
     try:
-        with niquests.Session(retries=1, disable_http3=True) as session:
+        with proxy.session(retries=1) as session:
             res_raw = session.post(
                 url="https://graphql.anilist.co",
                 headers={

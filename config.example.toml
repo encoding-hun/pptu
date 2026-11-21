@@ -1,5 +1,5 @@
 [default]
-proxy = ""
+proxy = ""  # one URL, or a pool each tracker picks one from per run: ["http://a:1", "socks5://b:2"]
 watch_dir = "~/rtorrent/watch/start"
 fast_upload = false
 snapshots = true

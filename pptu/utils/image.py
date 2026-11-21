@@ -76,6 +76,8 @@ class ImgUploader:
         self.uploader = tracker.config.get(tracker, "img_uploader")
         self.api_key = tracker.config.get("default", f"{self.uploader}_api_key", None)
         self.session = niquests.Session(retries=3, disable_http3=True)
+        if tracker.proxy:
+            self.session.proxies.update({"all": tracker.proxy})
 
     # Equal by host+key so the lru_cache upload cache hits across trackers.
     def __hash__(self) -> int:

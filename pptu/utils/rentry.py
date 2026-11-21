@@ -4,8 +4,7 @@ import time
 from functools import lru_cache
 from typing import Any
 
-import niquests
-
+from pptu.utils import proxy
 from pptu.utils.log import wprint
 
 
@@ -14,7 +13,7 @@ def rentry_upload(text: str, edit_code: str | None = None) -> dict[str, Any] | N
     base_url = "https://rentry.co"
     for attempt in range(3):
         try:
-            with niquests.Session(retries=3, disable_http3=True) as session:
+            with proxy.session(retries=3) as session:
                 session.get(base_url, timeout=30)
                 token = session.cookies.get("csrftoken", "")
                 if not token:

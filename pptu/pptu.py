@@ -29,6 +29,7 @@ from pptu.utils.config import Config
 from pptu.utils.io import which
 from pptu.utils.log import eprint, print, wprint
 from pptu.utils.progress import CustomTransferSpeedColumn
+from pptu.utils.proxy import using as using_proxy
 
 if TYPE_CHECKING:
     from pptu.uploaders import Uploader
@@ -401,25 +402,29 @@ class PPTU:
         return [x for x in snapshots if x != min_image]
 
     def prepare(self, mediainfo: str | list[str] | None, snapshots: list[Path]) -> bool:
-        if not self.tracker.prepare(
-            path=self.path,
-            torrent_path=self.torrent_path,
-            mediainfo=mediainfo,
-            snapshots=snapshots,
-            note=self.note,
-        ):
+        with using_proxy(self.tracker.proxy):
+            prepared = self.tracker.prepare(
+                path=self.path,
+                torrent_path=self.torrent_path,
+                mediainfo=mediainfo,
+                snapshots=snapshots,
+                note=self.note,
+            )
+        if not prepared:
             eprint(f"Preparing upload to [cyan]{self.tracker.cli.name}[/] failed.")
             return False
         return True
 
     def upload(self, mediainfo: str | list[str] | None, snapshots: list[Path]) -> None:
-        if not self.tracker.upload(
-            path=self.path,
-            torrent_path=self.torrent_path,
-            mediainfo=mediainfo,
-            snapshots=snapshots,
-            note=self.note,
-        ):
+        with using_proxy(self.tracker.proxy):
+            uploaded = self.tracker.upload(
+                path=self.path,
+                torrent_path=self.torrent_path,
+                mediainfo=mediainfo,
+                snapshots=snapshots,
+                note=self.note,
+            )
+        if not uploaded:
             eprint(f"Upload to [cyan]{self.tracker.cli.name}[/] failed.")
             return
         else:

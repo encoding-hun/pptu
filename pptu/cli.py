@@ -21,6 +21,7 @@ from pptu.uploaders import Uploader
 from pptu.utils.click import AliasedGroup, CaseInsensitiveSection
 from pptu.utils.config import Config
 from pptu.utils.log import eprint, print, wprint
+from pptu.utils.proxy import using as using_proxy
 
 CONTEXT_SETTINGS = Context.settings(
     help_option_names=["-h", "--help"],
@@ -182,7 +183,9 @@ def result(ctx: cloup.Context, /, trackers: list[Uploader], **kwargs: Any) -> No
             print("[bold green]Logging in to tracker[/]")
             print(f"[bold cyan]Logging in to {tracker.cli.aliases[0]}[/]")
             try:
-                if not tracker.login(args=args):
+                with using_proxy(tracker.proxy):
+                    logged_in = tracker.login(args=args)
+                if not logged_in:
                     eprint(f"Failed to log in to tracker [cyan]{tracker.cli.name}[/].")
                     failed_trackers.append(tracker)
                     continue

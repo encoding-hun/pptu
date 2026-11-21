@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from abc import ABC, abstractmethod
 from hashlib import sha1
 from http.cookiejar import MozillaCookieJar
@@ -11,6 +12,7 @@ import niquests
 from niquests.adapters import HTTPAdapter
 from niquests.packages.urllib3 import Retry
 
+from pptu.utils.collections import as_list
 from pptu.utils.config import Config
 from pptu.utils.log import eprint
 
@@ -55,6 +57,9 @@ class Uploader(ABC):
             except OSError as e:
                 eprint(f"Could not read cookies file [cyan]{self.cookies_path}[/]: {e}")
 
+        proxies = [x for x in as_list(self.config.get(self, "proxy") or []) if x]
+        self.proxy: str | None = random.choice(proxies) if proxies else None
+
         self.session: niquests.Session
         if self.cloudflare_bypass:
             from pptu.utils.cloudflare import CFSession
@@ -72,7 +77,7 @@ class Uploader(ABC):
             self.session = CFSession(
                 cookie_jar=self.cookie_jar,
                 cookies_path=self.cookies_path,
-                proxy=self.config.get(self, "proxy") or None,
+                proxy=self.proxy,
                 user_agent=self.config.get(self, "browser_ua") or None,
                 browser_path=self.config.get(self, "browser_path") or None,
                 cfsolve_path=self.config.get(self, "cfsolve_path") or None,
@@ -110,7 +115,8 @@ class Uploader(ABC):
             for cookie in self.cookie_jar:
                 self.session.cookies.set_cookie(cookie)
 
-            self.session.proxies.update({"all": self.config.get(self, "proxy")})
+            if self.proxy:
+                self.session.proxies.update({"all": self.proxy})
 
         self.data: dict[str, Any] = {}
         self.auto = False

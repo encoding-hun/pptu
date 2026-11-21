@@ -25,6 +25,7 @@ from rich.prompt import Confirm, Prompt
 
 from pptu import __version__
 from pptu.uploaders import Uploader
+from pptu.utils import proxy
 from pptu.utils.log import eprint, print, wprint
 from pptu.utils.xml import load_html
 
@@ -110,6 +111,8 @@ class AvistaZNetwork(Uploader, ABC):
             eprint("No 2captcha_api_key specified in config, cannot log in.")
             return False
 
+        twocaptcha = proxy.session()
+
         attempt = 1
         while True:
             r = self.session.get(f"{self.base_url}/auth/login")
@@ -126,7 +129,7 @@ class AvistaZNetwork(Uploader, ABC):
             captcha_url = el.attrs["src"]
 
             print("Submitting captcha to 2captcha")
-            res = self.session.post(
+            res = twocaptcha.post(
                 url="https://2captcha.com/in.php",
                 data={
                     "key": twocaptcha_api_key,
@@ -151,7 +154,7 @@ class AvistaZNetwork(Uploader, ABC):
             print("Waiting for solution.", end="", flush=True)
             while True:
                 time.sleep(5)
-                res = self.session.get(
+                res = twocaptcha.get(
                     url="https://2captcha.com/res.php",
                     params={
                         "key": twocaptcha_api_key,
@@ -184,7 +187,7 @@ class AvistaZNetwork(Uploader, ABC):
             if "/captcha" in str(
                 r.url
             ) or "Verification failed. You might be a robot!" in str(r.text):
-                self.session.post(
+                twocaptcha.post(
                     url="https://2captcha.com/res.php",
                     params={
                         "key": twocaptcha_api_key,
@@ -201,7 +204,7 @@ class AvistaZNetwork(Uploader, ABC):
                 attempt += 1
                 continue
 
-            self.session.post(
+            twocaptcha.post(
                 url="https://2captcha.com/res.php",
                 params={
                     "key": twocaptcha_api_key,

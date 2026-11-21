@@ -167,9 +167,7 @@ class nCore(Uploader):
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
             },
             retries=5,
-            proxies={"all": self.config.get(self, "proxy")}
-            if self.config.get(self, "proxy")
-            else None,
+            proxies={"all": self.proxy} if self.proxy else None,
             disable_http3=True,
         )
 
@@ -548,14 +546,17 @@ class nCore(Uploader):
 
         if not port_link:
             try:
-                port_site: dict = niquests.get(
+                port_site: dict = self.client.get(
                     url="https://port.hu/search/suggest-list",
                     params={"q": gi["title"].replace(" ", "+")},
+                    timeout=30,
                 ).json()
                 for x in port_site:
-                    if (site := niquests.get("https://port.hu" + x["url"]).text) and str(
-                        imdb
-                    ) in site:
+                    if (
+                        site := self.client.get(
+                            "https://port.hu" + x["url"], timeout=30
+                        ).text
+                    ) and str(imdb) in site:
                         port_link = "https://port.hu" + x["url"]
                         data = self._port_data_scraper(site) or {}
                         temp = x.get("subtitle", "").split(",")
@@ -573,7 +574,7 @@ class nCore(Uploader):
         else:
             print(f"PORT.hu link: {port_link}", True)
         if port_link and from_sec:
-            port_text = niquests.get(port_link).text
+            port_text = self.client.get(port_link, timeout=30).text
             data = self._port_data_scraper(port_text) or {}
 
         return {"link": port_link, **data}

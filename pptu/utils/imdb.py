@@ -2,9 +2,7 @@ import json
 from secrets import SystemRandom
 from typing import Any
 
-import niquests
-
-from pptu.utils import dict_to_json
+from pptu.utils import dict_to_json, proxy
 
 random = SystemRandom()
 
@@ -30,7 +28,7 @@ def imdb_search(query: str) -> list[dict[str, Any]]:
     if not isinstance(query, str):
         raise TypeError("query must be a string")
 
-    with niquests.Session(retries=5, disable_http3=True) as session:
+    with proxy.session(retries=5) as session:
         res = session.get(
             url=f"https://v3.sg.media-imdb.com/suggestion/a/{query}.json",
             params={
@@ -76,7 +74,7 @@ def imdb_data(title_id: str) -> dict[str, Any]:
     if not title_id.startswith("tt"):
         title_id = f"tt{title_id.lstrip('tT')}"
 
-    with niquests.Session(retries=5, disable_http3=True) as session:
+    with proxy.session(retries=5) as session:
         res = session.get(
             url="https://caching.graphql.imdb.com/",
             params={
