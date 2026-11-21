@@ -447,8 +447,8 @@ class nekoBT(Uploader):
 
             if selected_indices:
                 for num, member in enumerate(members_from_primary_group):
-                    role = Prompt.ask(f"Role for {member['display_name']}")
                     if num in selected_indices:
+                        role = Prompt.ask(f"Role for {member['display_name']}")
                         primary_group_members.append(
                             {
                                 "id": member["id"],
@@ -458,14 +458,7 @@ class nekoBT(Uploader):
                         )
 
         for secondary_group in self.secondary_groups:
-            role = ""
-            secondary_group_name = ""
-            if ";;" in secondary_group:
-                temp = secondary_group.split(";;")
-                display_name = temp[0]
-                role = temp[-1]
-            else:
-                secondary_group_name = secondary_group
+            secondary_group_name, _sep, role = secondary_group.partition(";;")
 
             secondary_group_info = self._get_group_info(secondary_group_name)
 
@@ -705,7 +698,7 @@ class nekoBT(Uploader):
         return res.get("data", {})
 
     def _format_display_name(
-        self, name: str, name_plus: list[str], group_name: str
+        self, name: str, name_plus: list[str], group_name: str | None
     ) -> str:
         final_name: str = name.replace(".", " ")
         if channel := find(r"[A-Z]{3}[2|5|7] [0|1]", final_name):
@@ -713,8 +706,8 @@ class nekoBT(Uploader):
         if codec := find(r"H 26[4|5]", final_name):
             final_name = final_name.replace(codec, codec.replace(" ", "."))
 
-        if self.config.get(self, "group_at_start", False):
-            final_name = re.sub(rf"(?:-)?{group_name}", "", final_name)
+        if group_name and self.config.get(self, "group_at_start", False):
+            final_name = re.sub(rf"-?{re.escape(group_name)}$", "", final_name)
             final_name = f"[{group_name}] " + final_name
 
         return f"{final_name} ({', '.join(name_plus)})" if name_plus else final_name
