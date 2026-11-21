@@ -281,9 +281,9 @@ class Nyaa(Uploader):
                 categories_tree = Tree(
                     "[chartreuse2]Available categories:[white /not bold]"
                 )
-                for cat_id, cat_desc in self.CATEGORIES.items():
+                for shortcut, cat_id in self.SHORTCUT_MAP.items():
                     categories_tree.add(
-                        f"[{self.SHORTCUT_MAP.get(cat_id)}] [cornflower_blue not bold]{cat_desc}[white /not bold]"
+                        f"\\[{shortcut}] [cornflower_blue not bold]{self.CATEGORIES[cat_id]}[white /not bold]"
                     )
                 rprint(categories_tree)
                 sys.exit(1)
