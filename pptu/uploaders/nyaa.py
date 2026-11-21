@@ -505,7 +505,7 @@ class Nyaa(Uploader):
         password = self.config.get(self, "password")
 
         if not username or not password:
-            eprint("No username or passwordy specified in config, cannot upload.")
+            eprint("No username or password specified in config, cannot upload.")
             return False
 
         print(f"Uploading to {self.cli.name}...")

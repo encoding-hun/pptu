@@ -21,6 +21,7 @@ class Config:
             shutil.copy(
                 Path(__file__).resolve().parent.with_name("config.example.toml"), file
             )
+            file.chmod(0o600)
             eprint(f"Config file doesn't exist, created to: [cyan]{file}[/]", fatal=True)
 
     def get(

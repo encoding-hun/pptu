@@ -116,7 +116,7 @@ class PPTU:
 
         passkey = self.config.get(self.tracker, "passkey") or self.tracker.passkey
         if not passkey and any("{passkey}" in x for x in announce_url):
-            eprint(f"Passkey not found for tracker [cyan]{self.tracker.cli.name}[cyan].")
+            eprint(f"Passkey not found for tracker [cyan]{self.tracker.cli.name}[/].")
             return False
 
         announce_url = [x.format(passkey=passkey) for x in announce_url]
