@@ -71,10 +71,15 @@ def _cached_upload_ptpimg(
 
 
 class ImgUploader:
-    def __init__(self, tracker: Uploader):
+    def __init__(self, tracker: Uploader, *, anonymous: bool = False):
         self.tracker = tracker
         self.uploader = tracker.config.get(tracker, "img_uploader")
         self.api_key = tracker.config.get("default", f"{self.uploader}_api_key", None)
+        if anonymous:
+            if self.uploader in {"ptpimg", "hdbimg"}:
+                wprint(f"{self.uploader} isn't anonymous, using kek.sh instead.")
+            self.uploader = "keksh"
+            self.api_key = None
         self.session = niquests.Session(retries=3, disable_http3=True)
         if tracker.proxy:
             self.session.proxies.update({"all": tracker.proxy})

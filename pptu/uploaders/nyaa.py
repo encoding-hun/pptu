@@ -24,6 +24,7 @@ from pptu.utils.mal import process_mal_info
 from pptu.utils.regex import find
 from pptu.utils.rentry import rentry_upload
 from pptu.utils.telegram import send_telegram_message
+from pptu.utils.torrent import public_torrent_bytes
 
 # Constants
 SUB_CODEC_MAP = {"UTF-8": "SRT"}
@@ -230,8 +231,12 @@ class Nyaa(Uploader):
         self.remake: bool = args.remake
 
         self.edit_code: str | None = args.edit_code
-        self.info: str | None = args.info or self.config.get(self, "info")
-        self.advert: str | None = args.advert
+        self.info: str | None = args.info or (
+            None if self.anonymous else self.config.get(self, "info")
+        )
+        self.advert: str | None = args.advert or (
+            None if self.anonymous else self.config.get(self, "advert")
+        )
 
         self.link: str | None = args.link
 
@@ -400,9 +405,8 @@ class Nyaa(Uploader):
         if note:
             description += f">{note}\n\n---\n\n"
 
-        advert = self.advert or self.config.get(self, "advert")
-        if advert:
-            description += f"{advert}\n\n---\n\n"
+        if self.advert:
+            description += f"{self.advert}\n\n---\n\n"
 
         chapter_track = next(iter(mediainfo_data.menu_tracks), None)
         chapter_str = "Yes" if chapter_track else "No"
@@ -451,7 +455,7 @@ class Nyaa(Uploader):
 
         # Upload snapshots
         if snapshots:
-            uploader = ImgUploader(self)
+            uploader = ImgUploader(self, anonymous=self.anonymous)
             print("Uploading snapshots...")
             snapshot_urls = uploader.upload(snapshots)
             if snapshot_urls:
@@ -478,7 +482,9 @@ class Nyaa(Uploader):
             "hidden": "hidden" if self.hidden else None,
             "complete": "complete" if self.complete else None,
             "remake": "remake" if self.remake else None,
-            "trusted": "trusted" if self.config.get(self, "trusted") else None,
+            "trusted": "trusted"
+            if self.config.get(self, "trusted") and not self.anonymous
+            else None,
             "information": self.info_url,
         }
 
@@ -504,7 +510,7 @@ class Nyaa(Uploader):
         print(f"Uploading to {self.cli.name}...")
 
         try:
-            torrent_data = torrent_path.read_bytes()
+            torrent_data = public_torrent_bytes(torrent_path)
         except Exception as e:
             eprint(f"Failed to read torrent file: {e}")
             return False

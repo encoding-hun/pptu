@@ -31,6 +31,7 @@ from pptu.utils.log import eprint, print, wprint
 from pptu.utils.mal import process_mal_info
 from pptu.utils.regex import find
 from pptu.utils.telegram import send_telegram_message
+from pptu.utils.torrent import public_torrent_bytes
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -425,7 +426,7 @@ class nekoBT(Uploader):
                     }
                 )
 
-        if not self.auto and not self.primary_group_members:
+        if not self.auto and not self.primary_group_members and not self.anonymous:
             options = []
             for member in members_from_primary_group:
                 options.append(
@@ -548,10 +549,10 @@ class nekoBT(Uploader):
         if note:
             description = f">{note}\n\n<br><hr><br>\n"
 
-        if advert := self.config.get(self, "advert", ""):
+        if not self.anonymous and (advert := self.config.get(self, "advert", "")):
             description += f"{advert}\n<br><hr><br>\n"
 
-        uploader = ImgUploader(self)
+        uploader = ImgUploader(self, anonymous=self.anonymous)
         if images := uploader.upload(snapshots):
             cols = min(self.config.get(self, "snapshot_columns", 3), len(images))
             if cols > 0:
@@ -572,7 +573,7 @@ class nekoBT(Uploader):
         self.display_name = self._format_display_name(path.stem, name_plus, group_name)
 
         self.data = {
-            "torrent": base64.b64encode(torrent_path.read_bytes()).decode(),
+            "torrent": base64.b64encode(public_torrent_bytes(torrent_path)).decode(),
             "title": self.display_name,
             "movie": self.movie,
             "batch": self.batch,
@@ -587,7 +588,7 @@ class nekoBT(Uploader):
             "anonymous": self.anonymous,
             "primary_group": {
                 "id": primary_group_info.get("id"),
-                "members": primary_group_members,
+                "members": [] if self.anonymous else primary_group_members,
             },
             "secondary_groups": secondary_groups,
             "audio_langs": ",".join(audios_langs).lower(),
