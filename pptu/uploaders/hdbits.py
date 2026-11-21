@@ -406,6 +406,10 @@ class HDBits(Uploader):
             return False
 
         torrent_url = f"https://hdbits.org{el.attrs['href']}"
-        torrent_path.write_bytes(self.session.get(torrent_url).content)
+        r = self.session.get(torrent_url)
+        if not r.ok or not (r.content or b"").startswith(b"d"):
+            eprint(f"Failed to download the uploaded torrent (HTTP {r.status_code}).")
+            return False
+        torrent_path.write_bytes(r.content or b"")
 
         return True
