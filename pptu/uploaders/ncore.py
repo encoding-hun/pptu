@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -149,7 +150,7 @@ class nCore(Uploader):
     def prepare(
         self,
         path: Path,
-        torrent_path: Path,  # noqa: ARG002
+        torrent_path: Path,
         mediainfo: str | list[str] | None,
         snapshots: list[Path],
         note: str | None,
@@ -195,12 +196,18 @@ class nCore(Uploader):
                 if imdb_url:
                     imdb_id = find(r"title/tt(\d+)", imdb_url)
             else:
-                self.nfo_file = Path(path / f"{release_name}.nfo")
-                with self.nfo_file.open("w", encoding="ascii") as f:
-                    if isinstance(mediainfo, list):
-                        f.write("\n\n".join(mediainfo))
-                    elif isinstance(mediainfo, str):
-                        f.write(mediainfo)
+                self.nfo_file = torrent_path.parent / f"{release_name}.nfo"
+                text = (
+                    "\n\n".join(mediainfo)
+                    if isinstance(mediainfo, list)
+                    else mediainfo or ""
+                )
+                text = unicodedata.normalize("NFKD", text)
+                self.nfo_file.write_text(
+                    "".join(c for c in text if not unicodedata.combining(c)),
+                    encoding="ascii",
+                    errors="replace",
+                )
 
         if not imdb_id and (
             (m := find(r"(.+?)\.S\d+(?:E\d+|\.)", path.name))
@@ -379,24 +386,24 @@ class nCore(Uploader):
                 "application/x-bittorrent",
             ),
             "kep1": (
-                str(snapshots[-3]),
+                snapshots[-3].name,
                 snapshots[-3].open("rb"),
                 f"image/{snapshots[-3].suffix.lstrip('.')}",
             ),
             "kep2": (
-                str(snapshots[-2]),
+                snapshots[-2].name,
                 snapshots[-2].open("rb"),
                 f"image/{snapshots[-2].suffix.lstrip('.')}",
             ),
             "kep3": (
-                str(snapshots[-1]),
+                snapshots[-1].name,
                 snapshots[-1].open("rb"),
                 f"image/{snapshots[-1].suffix.lstrip('.')}",
             ),
         }
         if self.nfo_file:
             files["nfo_fajl"] = (
-                str(self.nfo_file),
+                self.nfo_file.name,
                 self.nfo_file.open("rb"),
                 "application/octet-stream",
             )
