@@ -48,6 +48,7 @@ class Nyaa(Uploader):
     """
 
     randomize_infohash = False
+    needs_login = False
 
     CATEGORIES = {
         "1_1": "Anime - Anime Music Video",
@@ -263,7 +264,6 @@ class Nyaa(Uploader):
         self.category_help = args.category_help
 
         self.private = False
-        self.needs_login = False
 
         self.min_snapshots = 3
         self.snapshots_plus = 0

@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
 class nekoBT(Uploader):
     randomize_infohash = False
+    needs_login = False
 
     VIDEO_CODEC_MAP: dict[str, int] = {
         "AVC": 1,  # H.264
@@ -261,7 +262,6 @@ class nekoBT(Uploader):
         super().__init__(ctx)
         self.args = args
 
-        self.needs_login = False
         self.private = False
 
         self.movie: bool = args.movie

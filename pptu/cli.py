@@ -193,14 +193,18 @@ def result(ctx: cloup.Context, /, trackers: list[Uploader], **kwargs: Any) -> No
                 eprint(escape(str(e)))
                 failed_trackers.append(tracker)
                 continue
-        for cookie in tracker.session.cookies:
-            tracker.cookie_jar.set_cookie(cookie)
-        tracker.cookies_path.parent.mkdir(parents=True, exist_ok=True)
-        # prevent corrupted cookies file
-        with contextlib.suppress(PermissionError):
-            tracker.cookies_path.unlink(missing_ok=True)
+            except Exception as e:
+                eprint(f"Failed to log in to {tracker.cli.name}: {escape(str(e))}")
+                failed_trackers.append(tracker)
+                continue
+            for cookie in tracker.session.cookies:
+                tracker.cookie_jar.set_cookie(cookie)
+            tracker.cookies_path.parent.mkdir(parents=True, exist_ok=True)
+            # prevent corrupted cookies file
+            with contextlib.suppress(PermissionError):
+                tracker.cookies_path.unlink(missing_ok=True)
 
-        tracker.cookie_jar.save(ignore_discard=True)
+            tracker.cookie_jar.save(ignore_discard=True)
 
     for tracker in failed_trackers:
         trackers.remove(tracker)
@@ -285,6 +289,9 @@ def result(ctx: cloup.Context, /, trackers: list[Uploader], **kwargs: Any) -> No
                 pptu.upload(mediainfo, snapshots)
             except CloudflareBlocked as e:
                 eprint(escape(str(e)))
+                continue
+            except Exception as e:
+                eprint(f"Error uploading to {pptu.tracker.cli.name}: {escape(str(e))}")
                 continue
             print()
 

@@ -51,7 +51,7 @@ class Uploader(ABC):
         if not self.cookies_path.exists():
             self.cookies_path = cookies_dir / f"{self.cli.aliases[0].lower()}{suffix}.txt"
         self.cookie_jar = MozillaCookieJar(self.cookies_path)
-        if self.cookies_path.exists():
+        if self.needs_login and self.cookies_path.exists():
             try:
                 self.cookie_jar.load(ignore_expires=True, ignore_discard=True)
             except OSError as e:
