@@ -253,6 +253,7 @@ class HDBits(Uploader):
             if not tvdb:
                 if self.auto:
                     eprint("Unable to get TVDB ID")
+                    return False
                 tvdb = Prompt.ask("Enter TVDB ID")
 
             season = res["season"]

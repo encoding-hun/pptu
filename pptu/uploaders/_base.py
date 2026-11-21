@@ -118,7 +118,7 @@ class Uploader(ABC):
                 self.session.proxies.update({"all": self.proxy})
 
         self.data: dict[str, Any] = {}
-        self.auto = False
+        self.auto = bool(ctx.parent and ctx.parent.params.get("auto"))
         self.telegram = bool(
             ctx.parent.params.get("telegram") or self.config.get(self, "telegram")
         )
