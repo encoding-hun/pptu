@@ -11,6 +11,7 @@ import cloup
 from beaupy import select_multiple
 from guessit import guessit
 from langcodes import Language
+from niquests.cookies import RequestsCookieJar
 from pymediainfo import MediaInfo
 from rich import print as rprint
 from rich.prompt import Prompt
@@ -24,7 +25,7 @@ from pptu.utils.anilist import (
     process_anilist_info,
 )
 from pptu.utils.click import comma_separated_param
-from pptu.utils.collections import first_or_else
+from pptu.utils.collections import as_list, first_or_else
 from pptu.utils.image import ImgUploader
 from pptu.utils.log import eprint, print, wprint
 from pptu.utils.mal import process_mal_info
@@ -313,27 +314,39 @@ class nekoBT(Uploader):
 
     @property
     def announce_url(self) -> list[str]:
-        default_t = [
+        announces = [
             "https://tracker.nekobt.to/api/tracker/public/announce",
+            *as_list(self.config.get(self, "announce_urls") or []),
         ]
 
         if self.watch_dir:
-            default_t.append(
-                "https://tracker.nekobt.to/api/tracker/{passkey}/announce",
-            )
+            if self.config.get(self, "passkey") or self.passkey:
+                announces.append(
+                    "https://tracker.nekobt.to/api/tracker/{passkey}/announce"
+                )
+            else:
+                wprint("No passkey, the watch-dir torrent won't earn seeding credit.")
 
-        if external_t := self.config.get(self, "announce_urls", ""):
-            default_t.extend(external_t)
+        return announces
 
-        return default_t
+    @property
+    def _auth_cookies(self) -> RequestsCookieJar:
+        jar = RequestsCookieJar()
+        jar.set("ssid", self.config.get(self, "api_key", ""), domain="nekobt.to")
+        return jar
 
     @property
     def passkey(self) -> str | None:
+        if not hasattr(self, "_passkey"):
+            self._passkey = self._fetch_passkey()
+        return self._passkey
+
+    def _fetch_passkey(self) -> str | None:
         if self.watch_dir:
             try:
                 resp = self.session.get(
                     url="https://nekobt.to/api/v1/users/@me",
-                    cookies={"ssid": self.config.get(self, "api_key", "")},
+                    cookies=self._auth_cookies,
                     timeout=30,
                 )
                 res = resp.json()
@@ -607,7 +620,7 @@ class nekoBT(Uploader):
         try:
             resp = self.session.post(
                 url="https://nekobt.to/api/v1/upload",
-                cookies={"ssid": self.config.get(self, "api_key", "")},
+                cookies=self._auth_cookies,
                 json=self.data,
                 timeout=60,
             )
