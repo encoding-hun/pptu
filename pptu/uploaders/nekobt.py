@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import html
 import re
 import sys
 import urllib.parse
@@ -657,10 +658,10 @@ class nekoBT(Uploader):
         self, name: str, site_url: str, download_url: str
     ) -> None:
         message = (
-            f"\n<b>{name}</b>\n\n"
+            f"\n<b>{html.escape(name)}</b>\n\n"
             "- <b>Link</b>: "
-            f'<a href="{site_url}">View site</a> | '
-            f'<a href="{download_url}">Torrent file</a>'
+            f'<a href="{html.escape(site_url)}">View site</a> | '
+            f'<a href="{html.escape(download_url)}">Torrent file</a>'
         )
         send_telegram_message(self, message)
 

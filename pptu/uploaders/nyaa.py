@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import re
 import sys
 import urllib.parse
@@ -582,11 +583,11 @@ class Nyaa(Uploader):
     ) -> None:
         cat_desc = self.CATEGORIES.get(self.category, self.category)
         message = (
-            f"\n<b>{name}</b>\n\n"
-            f"- <b>Category</b>: {cat_desc}\n"
+            f"\n<b>{html.escape(name)}</b>\n\n"
+            f"- <b>Category</b>: {html.escape(cat_desc)}\n"
             "- <b>Link</b>: "
-            f'<a href="{site_url}">View site</a> | '
-            f'<a href="{download_url}">Torrent file</a>'
+            f'<a href="{html.escape(site_url)}">View site</a> | '
+            f'<a href="{html.escape(download_url)}">Torrent file</a>'
         )
         send_telegram_message(self, message)
 
