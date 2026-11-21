@@ -11,17 +11,18 @@ successful_uploader: list[str] = []
 
 # pkgutil instead of listing the directory, so it also works in frozen builds
 for uploader in sorted(pkgutil.iter_modules(__path__), key=lambda m: m.name):
-    if not uploader.name.startswith("_"):
+    if uploader.name.startswith("_"):
+        continue
+    try:
         module = importlib.import_module(f"pptu.uploaders.{uploader.name}")
-        try:
-            cls = getattr(
-                module, next(x for x in module.__dict__ if x.lower() == uploader.name)
-            )
-        except StopIteration:
-            failed_uploader.append(cls.__name__)
-        else:
-            globals()[cls.__name__] = cls
-            successful_uploader.append(cls.__name__)
+        cls = getattr(
+            module, next(x for x in module.__dict__ if x.lower() == uploader.name)
+        )
+    except Exception as e:
+        failed_uploader.append(f"{uploader.name} ({e or type(e).__name__})")
+    else:
+        globals()[cls.__name__] = cls
+        successful_uploader.append(cls.__name__)
 
 if failed_uploader:
     print(
