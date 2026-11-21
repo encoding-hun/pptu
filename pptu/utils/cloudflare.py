@@ -1190,6 +1190,10 @@ class CFSession(niquests.Session):
 
             if (
                 response.status_code in RETRYABLE_STATUSES
+                and (
+                    str(method).upper() not in {"POST", "PATCH"}
+                    or response.status_code == 429
+                )
                 and transient_retries < MAX_TRANSIENT_RETRIES
             ):
                 transient_retries += 1

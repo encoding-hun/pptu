@@ -102,7 +102,6 @@ class Uploader(ABC):
                                 "GET",
                                 "HEAD",
                                 "OPTIONS",
-                                "POST",
                                 "PUT",
                                 "TRACE",
                             ],
