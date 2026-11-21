@@ -5,6 +5,7 @@ import math
 import random
 import re
 import subprocess
+from hashlib import sha1
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -66,8 +67,10 @@ class PPTU:
 
         self.tracker.auto = auto
 
-        self.cache_dir: Path = dirs.user_cache_path / f"{path.name}_files"
+        path_key = sha1(str(path.resolve()).encode()).hexdigest()[:8]
+        self.cache_dir: Path = dirs.user_cache_path / f"{path.name}_{path_key}_files"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._drop_stale_cache()
         self.config = Config(dirs.user_config_path / "config.toml")
 
         self.torrent_path: Path = (
@@ -84,6 +87,22 @@ class PPTU:
             )
         else:
             self.num_snapshots = tracker.min_snapshots or 0
+
+    def _drop_stale_cache(self) -> None:
+        try:
+            files = [self.path] if self.path.is_file() else self.path.rglob("*")
+            newest = max((f.stat().st_mtime for f in files if f.is_file()), default=0.0)
+        except OSError:
+            return
+        stale = [
+            f
+            for f in self.cache_dir.iterdir()
+            if f.is_file() and f.stat().st_mtime < newest
+        ]
+        if stale:
+            wprint("Source was updated, regenerating its cached files.")
+        for f in stale:
+            f.unlink(missing_ok=True)
 
     def create_torrent(self) -> bool:
         torrent_creator: str = self.config.get("default", "torrent_creator", "torf")
@@ -103,19 +122,6 @@ class PPTU:
         announce_url = [x.format(passkey=passkey) for x in announce_url]
 
         cached = glob.escape(f"{self.path.name}[") + "*" + glob.escape("].torrent")
-        try:
-            time = self.path.stat().st_mtime
-            if self.path.is_dir():
-                time = min(x.stat().st_mtime for x in self.path.iterdir())
-        except Exception:
-            time = 0
-        # Torrents older than the source (any tracker's) are stale: drop them, so
-        # they're neither returned as-is nor reused as the base for new hashes
-        for old in self.cache_dir.glob(cached):
-            if old.stat().st_mtime < time:
-                if old == self.torrent_path:
-                    wprint("Source was possible updated, creating new torrent file.")
-                old.unlink()
 
         if self.torrent_path.exists():
             return True
@@ -303,9 +309,18 @@ class PPTU:
 
     def generate_snapshots(self) -> list[Path]:
         if self.path.is_dir():
-            files = sorted([*self.path.glob("*.mkv"), *self.path.glob("*.mp4")])
-        elif self.path.is_file():
+            files = sorted(
+                [
+                    *self.path.glob("*.mkv"),
+                    *self.path.glob("*.mp4"),
+                    *self.path.glob("*.m2ts"),
+                ]
+            )
+        else:
             files = [self.path]
+        if not files:
+            eprint(f"No video files to take snapshots from in [cyan]{self.path}[/].")
+            return []
 
         num_snapshots = self.num_snapshots + 1
         if self.tracker.all_files and self.path.is_dir():

@@ -221,9 +221,6 @@ def result(ctx: cloup.Context, /, trackers: list[Uploader], **kwargs: Any) -> No
             eprint(f"File [cyan]{path.name!r}[/] does not exist.")
             continue
 
-        cache_dir = ctx.obj.dirs.user_cache_path / f"{path.name}_files"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-
         for tracker in trackers:
             try:
                 pptu = PPTU(
